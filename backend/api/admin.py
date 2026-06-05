@@ -1,0 +1,98 @@
+from django.contrib import admin
+from .models import (
+    Community, Member, Committee, Event, Job,
+    Business, MatrimonyProfile, Campaign, Donation,
+    News, Family, FamilyMember, EventRegistration
+)
+
+@admin.register(Community)
+class CommunityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'type', 'state', 'plan', 'status')
+    list_filter = ('type', 'plan', 'status')
+    search_fields = ('name', 'state', 'district')
+
+@admin.register(Member)
+class MemberAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'phone', 'community', 'role', 'status')
+    list_filter = ('role', 'status', 'community')
+    search_fields = ('name', 'email', 'phone')
+
+@admin.register(Committee)
+class CommitteeAdmin(admin.ModelAdmin):
+    list_display = ('name', 'designation', 'community', 'since')
+    list_filter = ('community',)
+    search_fields = ('name', 'designation')
+
+@admin.register(Event)
+class EventAdmin(admin.ModelAdmin):
+    list_display = ('title', 'type', 'date', 'venue', 'attendees', 'status')
+    list_filter = ('status', 'type', 'community')
+    search_fields = ('title', 'venue')
+
+@admin.register(Job)
+class JobAdmin(admin.ModelAdmin):
+    list_display = ('role', 'company', 'location', 'type', 'posted_date')
+    list_filter = ('type', 'community')
+    search_fields = ('role', 'company')
+
+@admin.register(Business)
+class BusinessAdmin(admin.ModelAdmin):
+    list_display = ('name', 'category', 'owner', 'location', 'rating', 'verified')
+    list_filter = ('verified', 'community')
+    search_fields = ('name', 'owner')
+
+@admin.register(MatrimonyProfile)
+class MatrimonyProfileAdmin(admin.ModelAdmin):
+    list_display = ('name', 'gender', 'age', 'education', 'location', 'status')
+    list_filter = ('gender', 'status', 'community')
+    search_fields = ('name',)
+
+@admin.register(Campaign)
+class CampaignAdmin(admin.ModelAdmin):
+    list_display = ('title', 'goal', 'raised', 'community')
+    list_filter = ('community',)
+    search_fields = ('title',)
+
+@admin.register(Donation)
+class DonationAdmin(admin.ModelAdmin):
+    list_display = ('donor', 'amount', 'campaign', 'date', 'method', 'status')
+    list_filter = ('method', 'status', 'campaign')
+    search_fields = ('donor', 'note')
+
+@admin.register(News)
+class NewsAdmin(admin.ModelAdmin):
+    list_display = ('title', 'category', 'date', 'community')
+    list_filter = ('category', 'community')
+    search_fields = ('title', 'excerpt')
+
+@admin.register(Family)
+class FamilyAdmin(admin.ModelAdmin):
+    list_display = ('head', 'village', 'community')
+    list_filter = ('community',)
+    search_fields = ('head', 'village')
+
+@admin.register(FamilyMember)
+class FamilyMemberAdmin(admin.ModelAdmin):
+    list_display = ('name', 'relation', 'family', 'age', 'occupation')
+    list_filter = ('relation',)
+    search_fields = ('name', 'occupation')
+
+@admin.register(EventRegistration)
+class EventRegistrationAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'phone', 'event', 'attendees', 'registration_date')
+    list_filter = ('event', 'registration_date')
+    search_fields = ('name', 'email', 'phone')
+
+from .models import CommunityApprovalHistory, Notification
+
+@admin.register(CommunityApprovalHistory)
+class CommunityApprovalHistoryAdmin(admin.ModelAdmin):
+    list_display = ('community', 'approval_level', 'approved_by', 'approved_date', 'status')
+    list_filter = ('approval_level', 'status')
+    search_fields = ('community__name', 'approved_by__username')
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('recipient', 'title', 'created_at', 'is_read', 'notification_type')
+    list_filter = ('is_read', 'notification_type')
+    search_fields = ('recipient__username', 'title', 'message')
