@@ -56,7 +56,7 @@ function Body() {
 
   return (
     <PageWrap title="Platform Settings" desc="Configure global platform behaviour, integrations and security" action={
-      <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium shadow-sapphire"><Check className="w-4 h-4" /> Save changes</button>
+      <button onClick={() => alert("Platform settings saved successfully!")} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold shadow-sm hover:bg-primary/95 transition"><Check className="w-4 h-4" /> Save changes</button>
     }>
       <div className="grid lg:grid-cols-[220px_1fr] gap-5">
         <nav className="space-y-1 lg:sticky lg:top-20 lg:self-start">

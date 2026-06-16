@@ -29,8 +29,10 @@ import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settin
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardPlanRouteImport } from './routes/dashboard.plan'
 import { Route as DashboardNotificationsRouteImport } from './routes/dashboard.notifications'
+import { Route as DashboardMessagesRouteImport } from './routes/dashboard.messages'
 import { Route as DashboardMatrimonyRouteImport } from './routes/dashboard.matrimony'
 import { Route as DashboardJobsRouteImport } from './routes/dashboard.jobs'
+import { Route as DashboardHierarchyRouteImport } from './routes/dashboard.hierarchy'
 import { Route as DashboardFamilyRouteImport } from './routes/dashboard.family'
 import { Route as DashboardEventsRouteImport } from './routes/dashboard.events'
 import { Route as DashboardDonationsRouteImport } from './routes/dashboard.donations'
@@ -44,12 +46,14 @@ import { Route as CommunityAdminNewsRouteImport } from './routes/community-admin
 import { Route as CommunityAdminMembersRouteImport } from './routes/community-admin.members'
 import { Route as CommunityAdminMatrimonyRouteImport } from './routes/community-admin.matrimony'
 import { Route as CommunityAdminJobsRouteImport } from './routes/community-admin.jobs'
+import { Route as CommunityAdminHierarchyRouteImport } from './routes/community-admin.hierarchy'
 import { Route as CommunityAdminGalleryRouteImport } from './routes/community-admin.gallery'
 import { Route as CommunityAdminFamiliesRouteImport } from './routes/community-admin.families'
 import { Route as CommunityAdminEventsRouteImport } from './routes/community-admin.events'
 import { Route as CommunityAdminDonationsRouteImport } from './routes/community-admin.donations'
 import { Route as CommunityAdminCommitteeRouteImport } from './routes/community-admin.committee'
 import { Route as CommunityAdminBusinessesRouteImport } from './routes/community-admin.businesses'
+import { Route as CommunityAdminAdvertisementsRouteImport } from './routes/community-admin.advertisements'
 import { Route as AdminSubscriptionsRouteImport } from './routes/admin.subscriptions'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminRolesRouteImport } from './routes/admin.roles'
@@ -59,6 +63,7 @@ import { Route as AdminMatrimonyRouteImport } from './routes/admin.matrimony'
 import { Route as AdminJobsBusinessesRouteImport } from './routes/admin.jobs-businesses'
 import { Route as AdminEventsRouteImport } from './routes/admin.events'
 import { Route as AdminDonationsRouteImport } from './routes/admin.donations'
+import { Route as AdminCommunityHierarchyRouteImport } from './routes/admin.community-hierarchy'
 import { Route as AdminCommunitiesRouteImport } from './routes/admin.communities'
 import { Route as AdminCommitteeRouteImport } from './routes/admin.committee'
 import { Route as AdminCmsRouteImport } from './routes/admin.cms'
@@ -164,6 +169,11 @@ const DashboardNotificationsRoute = DashboardNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardMessagesRoute = DashboardMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardMatrimonyRoute = DashboardMatrimonyRouteImport.update({
   id: '/matrimony',
   path: '/matrimony',
@@ -172,6 +182,11 @@ const DashboardMatrimonyRoute = DashboardMatrimonyRouteImport.update({
 const DashboardJobsRoute = DashboardJobsRouteImport.update({
   id: '/jobs',
   path: '/jobs',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardHierarchyRoute = DashboardHierarchyRouteImport.update({
+  id: '/hierarchy',
+  path: '/hierarchy',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardFamilyRoute = DashboardFamilyRouteImport.update({
@@ -240,6 +255,11 @@ const CommunityAdminJobsRoute = CommunityAdminJobsRouteImport.update({
   path: '/jobs',
   getParentRoute: () => CommunityAdminRoute,
 } as any)
+const CommunityAdminHierarchyRoute = CommunityAdminHierarchyRouteImport.update({
+  id: '/hierarchy',
+  path: '/hierarchy',
+  getParentRoute: () => CommunityAdminRoute,
+} as any)
 const CommunityAdminGalleryRoute = CommunityAdminGalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
@@ -269,6 +289,12 @@ const CommunityAdminBusinessesRoute =
   CommunityAdminBusinessesRouteImport.update({
     id: '/businesses',
     path: '/businesses',
+    getParentRoute: () => CommunityAdminRoute,
+  } as any)
+const CommunityAdminAdvertisementsRoute =
+  CommunityAdminAdvertisementsRouteImport.update({
+    id: '/advertisements',
+    path: '/advertisements',
     getParentRoute: () => CommunityAdminRoute,
   } as any)
 const AdminSubscriptionsRoute = AdminSubscriptionsRouteImport.update({
@@ -316,6 +342,11 @@ const AdminDonationsRoute = AdminDonationsRouteImport.update({
   path: '/donations',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminCommunityHierarchyRoute = AdminCommunityHierarchyRouteImport.update({
+  id: '/community-hierarchy',
+  path: '/community-hierarchy',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminCommunitiesRoute = AdminCommunitiesRouteImport.update({
   id: '/communities',
   path: '/communities',
@@ -353,6 +384,7 @@ export interface FileRoutesByFullPath {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/committee': typeof AdminCommitteeRoute
   '/admin/communities': typeof AdminCommunitiesRoute
+  '/admin/community-hierarchy': typeof AdminCommunityHierarchyRoute
   '/admin/donations': typeof AdminDonationsRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/jobs-businesses': typeof AdminJobsBusinessesRoute
@@ -362,12 +394,14 @@ export interface FileRoutesByFullPath {
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/community-admin/advertisements': typeof CommunityAdminAdvertisementsRoute
   '/community-admin/businesses': typeof CommunityAdminBusinessesRoute
   '/community-admin/committee': typeof CommunityAdminCommitteeRoute
   '/community-admin/donations': typeof CommunityAdminDonationsRoute
   '/community-admin/events': typeof CommunityAdminEventsRoute
   '/community-admin/families': typeof CommunityAdminFamiliesRoute
   '/community-admin/gallery': typeof CommunityAdminGalleryRoute
+  '/community-admin/hierarchy': typeof CommunityAdminHierarchyRoute
   '/community-admin/jobs': typeof CommunityAdminJobsRoute
   '/community-admin/matrimony': typeof CommunityAdminMatrimonyRoute
   '/community-admin/members': typeof CommunityAdminMembersRoute
@@ -381,8 +415,10 @@ export interface FileRoutesByFullPath {
   '/dashboard/donations': typeof DashboardDonationsRoute
   '/dashboard/events': typeof DashboardEventsRoute
   '/dashboard/family': typeof DashboardFamilyRoute
+  '/dashboard/hierarchy': typeof DashboardHierarchyRoute
   '/dashboard/jobs': typeof DashboardJobsRoute
   '/dashboard/matrimony': typeof DashboardMatrimonyRoute
+  '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/plan': typeof DashboardPlanRoute
   '/dashboard/profile': typeof DashboardProfileRoute
@@ -405,6 +441,7 @@ export interface FileRoutesByTo {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/committee': typeof AdminCommitteeRoute
   '/admin/communities': typeof AdminCommunitiesRoute
+  '/admin/community-hierarchy': typeof AdminCommunityHierarchyRoute
   '/admin/donations': typeof AdminDonationsRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/jobs-businesses': typeof AdminJobsBusinessesRoute
@@ -414,12 +451,14 @@ export interface FileRoutesByTo {
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/community-admin/advertisements': typeof CommunityAdminAdvertisementsRoute
   '/community-admin/businesses': typeof CommunityAdminBusinessesRoute
   '/community-admin/committee': typeof CommunityAdminCommitteeRoute
   '/community-admin/donations': typeof CommunityAdminDonationsRoute
   '/community-admin/events': typeof CommunityAdminEventsRoute
   '/community-admin/families': typeof CommunityAdminFamiliesRoute
   '/community-admin/gallery': typeof CommunityAdminGalleryRoute
+  '/community-admin/hierarchy': typeof CommunityAdminHierarchyRoute
   '/community-admin/jobs': typeof CommunityAdminJobsRoute
   '/community-admin/matrimony': typeof CommunityAdminMatrimonyRoute
   '/community-admin/members': typeof CommunityAdminMembersRoute
@@ -433,8 +472,10 @@ export interface FileRoutesByTo {
   '/dashboard/donations': typeof DashboardDonationsRoute
   '/dashboard/events': typeof DashboardEventsRoute
   '/dashboard/family': typeof DashboardFamilyRoute
+  '/dashboard/hierarchy': typeof DashboardHierarchyRoute
   '/dashboard/jobs': typeof DashboardJobsRoute
   '/dashboard/matrimony': typeof DashboardMatrimonyRoute
+  '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/plan': typeof DashboardPlanRoute
   '/dashboard/profile': typeof DashboardProfileRoute
@@ -462,6 +503,7 @@ export interface FileRoutesById {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/committee': typeof AdminCommitteeRoute
   '/admin/communities': typeof AdminCommunitiesRoute
+  '/admin/community-hierarchy': typeof AdminCommunityHierarchyRoute
   '/admin/donations': typeof AdminDonationsRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/jobs-businesses': typeof AdminJobsBusinessesRoute
@@ -471,12 +513,14 @@ export interface FileRoutesById {
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/community-admin/advertisements': typeof CommunityAdminAdvertisementsRoute
   '/community-admin/businesses': typeof CommunityAdminBusinessesRoute
   '/community-admin/committee': typeof CommunityAdminCommitteeRoute
   '/community-admin/donations': typeof CommunityAdminDonationsRoute
   '/community-admin/events': typeof CommunityAdminEventsRoute
   '/community-admin/families': typeof CommunityAdminFamiliesRoute
   '/community-admin/gallery': typeof CommunityAdminGalleryRoute
+  '/community-admin/hierarchy': typeof CommunityAdminHierarchyRoute
   '/community-admin/jobs': typeof CommunityAdminJobsRoute
   '/community-admin/matrimony': typeof CommunityAdminMatrimonyRoute
   '/community-admin/members': typeof CommunityAdminMembersRoute
@@ -490,8 +534,10 @@ export interface FileRoutesById {
   '/dashboard/donations': typeof DashboardDonationsRoute
   '/dashboard/events': typeof DashboardEventsRoute
   '/dashboard/family': typeof DashboardFamilyRoute
+  '/dashboard/hierarchy': typeof DashboardHierarchyRoute
   '/dashboard/jobs': typeof DashboardJobsRoute
   '/dashboard/matrimony': typeof DashboardMatrimonyRoute
+  '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/plan': typeof DashboardPlanRoute
   '/dashboard/profile': typeof DashboardProfileRoute
@@ -520,6 +566,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/committee'
     | '/admin/communities'
+    | '/admin/community-hierarchy'
     | '/admin/donations'
     | '/admin/events'
     | '/admin/jobs-businesses'
@@ -529,12 +576,14 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/subscriptions'
+    | '/community-admin/advertisements'
     | '/community-admin/businesses'
     | '/community-admin/committee'
     | '/community-admin/donations'
     | '/community-admin/events'
     | '/community-admin/families'
     | '/community-admin/gallery'
+    | '/community-admin/hierarchy'
     | '/community-admin/jobs'
     | '/community-admin/matrimony'
     | '/community-admin/members'
@@ -548,8 +597,10 @@ export interface FileRouteTypes {
     | '/dashboard/donations'
     | '/dashboard/events'
     | '/dashboard/family'
+    | '/dashboard/hierarchy'
     | '/dashboard/jobs'
     | '/dashboard/matrimony'
+    | '/dashboard/messages'
     | '/dashboard/notifications'
     | '/dashboard/plan'
     | '/dashboard/profile'
@@ -572,6 +623,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/committee'
     | '/admin/communities'
+    | '/admin/community-hierarchy'
     | '/admin/donations'
     | '/admin/events'
     | '/admin/jobs-businesses'
@@ -581,12 +633,14 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/subscriptions'
+    | '/community-admin/advertisements'
     | '/community-admin/businesses'
     | '/community-admin/committee'
     | '/community-admin/donations'
     | '/community-admin/events'
     | '/community-admin/families'
     | '/community-admin/gallery'
+    | '/community-admin/hierarchy'
     | '/community-admin/jobs'
     | '/community-admin/matrimony'
     | '/community-admin/members'
@@ -600,8 +654,10 @@ export interface FileRouteTypes {
     | '/dashboard/donations'
     | '/dashboard/events'
     | '/dashboard/family'
+    | '/dashboard/hierarchy'
     | '/dashboard/jobs'
     | '/dashboard/matrimony'
+    | '/dashboard/messages'
     | '/dashboard/notifications'
     | '/dashboard/plan'
     | '/dashboard/profile'
@@ -628,6 +684,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/committee'
     | '/admin/communities'
+    | '/admin/community-hierarchy'
     | '/admin/donations'
     | '/admin/events'
     | '/admin/jobs-businesses'
@@ -637,12 +694,14 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/subscriptions'
+    | '/community-admin/advertisements'
     | '/community-admin/businesses'
     | '/community-admin/committee'
     | '/community-admin/donations'
     | '/community-admin/events'
     | '/community-admin/families'
     | '/community-admin/gallery'
+    | '/community-admin/hierarchy'
     | '/community-admin/jobs'
     | '/community-admin/matrimony'
     | '/community-admin/members'
@@ -656,8 +715,10 @@ export interface FileRouteTypes {
     | '/dashboard/donations'
     | '/dashboard/events'
     | '/dashboard/family'
+    | '/dashboard/hierarchy'
     | '/dashboard/jobs'
     | '/dashboard/matrimony'
+    | '/dashboard/messages'
     | '/dashboard/notifications'
     | '/dashboard/plan'
     | '/dashboard/profile'
@@ -825,6 +886,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardNotificationsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/messages': {
+      id: '/dashboard/messages'
+      path: '/messages'
+      fullPath: '/dashboard/messages'
+      preLoaderRoute: typeof DashboardMessagesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/matrimony': {
       id: '/dashboard/matrimony'
       path: '/matrimony'
@@ -837,6 +905,13 @@ declare module '@tanstack/react-router' {
       path: '/jobs'
       fullPath: '/dashboard/jobs'
       preLoaderRoute: typeof DashboardJobsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/hierarchy': {
+      id: '/dashboard/hierarchy'
+      path: '/hierarchy'
+      fullPath: '/dashboard/hierarchy'
+      preLoaderRoute: typeof DashboardHierarchyRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/family': {
@@ -930,6 +1005,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CommunityAdminJobsRouteImport
       parentRoute: typeof CommunityAdminRoute
     }
+    '/community-admin/hierarchy': {
+      id: '/community-admin/hierarchy'
+      path: '/hierarchy'
+      fullPath: '/community-admin/hierarchy'
+      preLoaderRoute: typeof CommunityAdminHierarchyRouteImport
+      parentRoute: typeof CommunityAdminRoute
+    }
     '/community-admin/gallery': {
       id: '/community-admin/gallery'
       path: '/gallery'
@@ -970,6 +1052,13 @@ declare module '@tanstack/react-router' {
       path: '/businesses'
       fullPath: '/community-admin/businesses'
       preLoaderRoute: typeof CommunityAdminBusinessesRouteImport
+      parentRoute: typeof CommunityAdminRoute
+    }
+    '/community-admin/advertisements': {
+      id: '/community-admin/advertisements'
+      path: '/advertisements'
+      fullPath: '/community-admin/advertisements'
+      preLoaderRoute: typeof CommunityAdminAdvertisementsRouteImport
       parentRoute: typeof CommunityAdminRoute
     }
     '/admin/subscriptions': {
@@ -1035,6 +1124,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDonationsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/community-hierarchy': {
+      id: '/admin/community-hierarchy'
+      path: '/community-hierarchy'
+      fullPath: '/admin/community-hierarchy'
+      preLoaderRoute: typeof AdminCommunityHierarchyRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/communities': {
       id: '/admin/communities'
       path: '/communities'
@@ -1071,6 +1167,7 @@ interface AdminRouteChildren {
   AdminCmsRoute: typeof AdminCmsRoute
   AdminCommitteeRoute: typeof AdminCommitteeRoute
   AdminCommunitiesRoute: typeof AdminCommunitiesRoute
+  AdminCommunityHierarchyRoute: typeof AdminCommunityHierarchyRoute
   AdminDonationsRoute: typeof AdminDonationsRoute
   AdminEventsRoute: typeof AdminEventsRoute
   AdminJobsBusinessesRoute: typeof AdminJobsBusinessesRoute
@@ -1088,6 +1185,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCmsRoute: AdminCmsRoute,
   AdminCommitteeRoute: AdminCommitteeRoute,
   AdminCommunitiesRoute: AdminCommunitiesRoute,
+  AdminCommunityHierarchyRoute: AdminCommunityHierarchyRoute,
   AdminDonationsRoute: AdminDonationsRoute,
   AdminEventsRoute: AdminEventsRoute,
   AdminJobsBusinessesRoute: AdminJobsBusinessesRoute,
@@ -1103,12 +1201,14 @@ const AdminRouteChildren: AdminRouteChildren = {
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface CommunityAdminRouteChildren {
+  CommunityAdminAdvertisementsRoute: typeof CommunityAdminAdvertisementsRoute
   CommunityAdminBusinessesRoute: typeof CommunityAdminBusinessesRoute
   CommunityAdminCommitteeRoute: typeof CommunityAdminCommitteeRoute
   CommunityAdminDonationsRoute: typeof CommunityAdminDonationsRoute
   CommunityAdminEventsRoute: typeof CommunityAdminEventsRoute
   CommunityAdminFamiliesRoute: typeof CommunityAdminFamiliesRoute
   CommunityAdminGalleryRoute: typeof CommunityAdminGalleryRoute
+  CommunityAdminHierarchyRoute: typeof CommunityAdminHierarchyRoute
   CommunityAdminJobsRoute: typeof CommunityAdminJobsRoute
   CommunityAdminMatrimonyRoute: typeof CommunityAdminMatrimonyRoute
   CommunityAdminMembersRoute: typeof CommunityAdminMembersRoute
@@ -1121,12 +1221,14 @@ interface CommunityAdminRouteChildren {
 }
 
 const CommunityAdminRouteChildren: CommunityAdminRouteChildren = {
+  CommunityAdminAdvertisementsRoute: CommunityAdminAdvertisementsRoute,
   CommunityAdminBusinessesRoute: CommunityAdminBusinessesRoute,
   CommunityAdminCommitteeRoute: CommunityAdminCommitteeRoute,
   CommunityAdminDonationsRoute: CommunityAdminDonationsRoute,
   CommunityAdminEventsRoute: CommunityAdminEventsRoute,
   CommunityAdminFamiliesRoute: CommunityAdminFamiliesRoute,
   CommunityAdminGalleryRoute: CommunityAdminGalleryRoute,
+  CommunityAdminHierarchyRoute: CommunityAdminHierarchyRoute,
   CommunityAdminJobsRoute: CommunityAdminJobsRoute,
   CommunityAdminMatrimonyRoute: CommunityAdminMatrimonyRoute,
   CommunityAdminMembersRoute: CommunityAdminMembersRoute,
@@ -1148,8 +1250,10 @@ interface DashboardRouteChildren {
   DashboardDonationsRoute: typeof DashboardDonationsRoute
   DashboardEventsRoute: typeof DashboardEventsRoute
   DashboardFamilyRoute: typeof DashboardFamilyRoute
+  DashboardHierarchyRoute: typeof DashboardHierarchyRoute
   DashboardJobsRoute: typeof DashboardJobsRoute
   DashboardMatrimonyRoute: typeof DashboardMatrimonyRoute
+  DashboardMessagesRoute: typeof DashboardMessagesRoute
   DashboardNotificationsRoute: typeof DashboardNotificationsRoute
   DashboardPlanRoute: typeof DashboardPlanRoute
   DashboardProfileRoute: typeof DashboardProfileRoute
@@ -1163,8 +1267,10 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardDonationsRoute: DashboardDonationsRoute,
   DashboardEventsRoute: DashboardEventsRoute,
   DashboardFamilyRoute: DashboardFamilyRoute,
+  DashboardHierarchyRoute: DashboardHierarchyRoute,
   DashboardJobsRoute: DashboardJobsRoute,
   DashboardMatrimonyRoute: DashboardMatrimonyRoute,
+  DashboardMessagesRoute: DashboardMessagesRoute,
   DashboardNotificationsRoute: DashboardNotificationsRoute,
   DashboardPlanRoute: DashboardPlanRoute,
   DashboardProfileRoute: DashboardProfileRoute,

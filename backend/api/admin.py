@@ -43,9 +43,41 @@ class BusinessAdmin(admin.ModelAdmin):
 
 @admin.register(MatrimonyProfile)
 class MatrimonyProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'gender', 'age', 'education', 'location', 'status')
+    list_display = ('name', 'gender', 'age', 'education', 'city', 'status')
     list_filter = ('gender', 'status', 'community')
     search_fields = ('name',)
+
+from .models import MatrimonyPhoto, PartnerPreference, ProfileVisibility, InterestRequest, Wishlist, ProfileView, MatrimonyAuditLog
+
+@admin.register(MatrimonyPhoto)
+class MatrimonyPhotoAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'category', 'is_private', 'order')
+    list_filter = ('category', 'is_private')
+
+@admin.register(PartnerPreference)
+class PartnerPreferenceAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'gender', 'min_age', 'max_age')
+
+@admin.register(ProfileVisibility)
+class ProfileVisibilityAdmin(admin.ModelAdmin):
+    list_display = ('user', 'visibility_type')
+
+@admin.register(InterestRequest)
+class InterestRequestAdmin(admin.ModelAdmin):
+    list_display = ('sender', 'receiver', 'status', 'created_at')
+    list_filter = ('status',)
+
+@admin.register(Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ('user', 'profile', 'created_at')
+
+@admin.register(ProfileView)
+class ProfileViewAdmin(admin.ModelAdmin):
+    list_display = ('viewer', 'profile', 'viewed_at')
+
+@admin.register(MatrimonyAuditLog)
+class MatrimonyAuditLogAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'action', 'performed_by', 'timestamp')
 
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
@@ -83,7 +115,7 @@ class EventRegistrationAdmin(admin.ModelAdmin):
     list_filter = ('event', 'registration_date')
     search_fields = ('name', 'email', 'phone')
 
-from .models import CommunityApprovalHistory, Notification
+from .models import CommunityApprovalHistory, Notification, EmailTemplate, EmailLog
 
 @admin.register(CommunityApprovalHistory)
 class CommunityApprovalHistoryAdmin(admin.ModelAdmin):
@@ -96,3 +128,16 @@ class NotificationAdmin(admin.ModelAdmin):
     list_display = ('recipient', 'title', 'created_at', 'is_read', 'notification_type')
     list_filter = ('is_read', 'notification_type')
     search_fields = ('recipient__username', 'title', 'message')
+
+@admin.register(EmailTemplate)
+class EmailTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'subject', 'status', 'created_at')
+    list_filter = ('status',)
+    search_fields = ('name', 'subject')
+
+@admin.register(EmailLog)
+class EmailLogAdmin(admin.ModelAdmin):
+    list_display = ('recipient', 'subject', 'trigger_event', 'status', 'sent_at')
+    list_filter = ('status', 'trigger_event')
+    search_fields = ('recipient', 'subject')
+

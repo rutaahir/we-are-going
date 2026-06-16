@@ -4,9 +4,11 @@ import { Users, UserCheck, Calendar, HandHeart, UsersRound, Building2, CheckCirc
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from "recharts";
 import { PageWrap } from "@/components/wag/PageWrap";
 import { AnimatedCard, AvatarCircle, StatCard, StatusBadge, DetailDrawer, PlanBadge } from "@/components/wag/primitives";
+import { cn, hasPermission } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { MEMBERS, NEWS } from "@/data/mock";
+import { AdBanner } from "@/components/wag/AdBanner";
 
 const growth = [{ m: "Jan", v: 920 }, { m: "Feb", v: 980 }, { m: "Mar", v: 1040 }, { m: "Apr", v: 1110 }, { m: "May", v: 1180 }, { m: "Jun", v: 1240 }];
 const donations = [{ m: "Jan", v: 124000 }, { m: "Feb", v: 86000 }, { m: "Mar", v: 192000 }, { m: "Apr", v: 154000 }, { m: "May", v: 218000 }, { m: "Jun", v: 247000 }];
@@ -22,12 +24,15 @@ export const Route = createFileRoute("/community-admin/")({
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
 
-    const fetchCommunities = () => {
+    const [membersList, setMembersList] = useState<any[]>([]);
+    const [newsList, setNewsList] = useState<any[]>([]);
+
+    const fetchData = () => {
       if (!user || !user.communityId) return;
+      
       api.getCommunities()
         .then(res => {
           setCommunities(res || []);
-          // Filter subsidiaries where parent matches user.communityId and status is Pending Parent Community Approval
           const subs = (res || []).filter((c: any) => 
             String(c.parent) === String(user.communityId) && 
             c.status === "Pending Parent Community Approval"
@@ -35,10 +40,24 @@ export const Route = createFileRoute("/community-admin/")({
           setSubsidiaries(subs);
         })
         .catch(err => console.error("Failed to load communities", err));
+
+      api.getMembers({ communityId: user.communityId })
+        .then(res => setMembersList(res || []))
+        .catch(err => console.error(err));
+        
+      api.getNews({ communityId: user.communityId })
+        .then(res => setNewsList(res || []))
+        .catch(err => console.error(err));
     };
 
     useEffect(() => {
-      fetchCommunities();
+      fetchData();
+      const handleUpdate = () => {
+        console.log("\n[COMPONENT REFRESHED]\nOverview\n");
+        fetchData();
+      };
+      window.addEventListener("community-updated", handleUpdate);
+      return () => window.removeEventListener("community-updated", handleUpdate);
     }, [user]);
 
     const handleApproveSub = async (id: string) => {
@@ -48,7 +67,7 @@ export const Route = createFileRoute("/community-admin/")({
         await api.approveCommunity(id, remarks || "Approved by Parent Community Admin.");
         setRemarks("");
         setSelectedSub(null);
-        fetchCommunities();
+        fetchData();
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to approve subsidiary.");
       } finally {
@@ -67,7 +86,7 @@ export const Route = createFileRoute("/community-admin/")({
         await api.rejectCommunity(id, remarks);
         setRemarks("");
         setSelectedSub(null);
-        fetchCommunities();
+        fetchData();
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to reject subsidiary.");
       } finally {
@@ -75,10 +94,70 @@ export const Route = createFileRoute("/community-admin/")({
       }
     };
 
+    const canEditProfile = hasPermission(user, ["Edit Community Profile", "Manage Logo", "Manage Banner", "Manage Community Information"]);
+    const canManageCommunities = hasPermission(user, ["Manage Subsidiaries"]);
+    const canApproveMembers = hasPermission(user, ["Approve Members"]);
+
     return (
-      <PageWrap title="Samaj Overview" desc={`${user?.communityName || "Rampara Ahir Samaj"} · Admin Panel`}>
+      <PageWrap title="Samaj Overview" desc={`${user?.communityName || "Samaj"} · Admin Panel`}>
+        {/* Global Admin Context Banner */}
+        <AnimatedCard className="mb-8 p-5 bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
+          <div className="flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
+            <div className="flex items-center gap-4">
+              {user?.communityLogo ? (
+                <img src={user.communityLogo} alt="" className="w-16 h-16 rounded-xl object-cover border border-warm shadow-sm" />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center text-white text-2xl font-bold shadow-sm">
+                  {user?.communityName ? user.communityName.charAt(0).toUpperCase() : "P"}
+                </div>
+              )}
+              <div>
+                <h2 className="font-ui font-bold text-xl text-foreground">
+                  {user?.customRoleName ? `Role: ${user.customRoleName}` : "Community Administrator"}
+                </h2>
+                <div className="text-sm text-warm-muted mt-1">
+                  {user?.customRoleName ? (
+                    <div className="flex flex-col gap-0.5 text-xs text-warm-muted">
+                      <div>Name: <span className="font-semibold text-foreground">{user?.name}</span></div>
+                      <div>Role: <span className="font-semibold text-primary">{user?.customRoleName}</span></div>
+                      <div>Community: <span className="font-semibold text-primary">{user?.communityName || "Platform"}</span></div>
+                    </div>
+                  ) : (
+                    <>Managing: <span className="font-semibold text-primary">{user?.communityName || "Platform"}</span></>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-1.5 md:items-end text-sm">
+              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-warm shadow-sm">
+                <span className="text-warm-muted">Type:</span>
+                <span className="font-semibold flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${user?.communityType?.includes('Super') ? 'bg-orange-500' : 'bg-blue-500'}`}></span>
+                  {user?.communityType || "Community"}
+                </span>
+              </div>
+              {user?.parentCommunityName ? (
+                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-warm shadow-sm">
+                  <span className="text-warm-muted">Parent:</span>
+                  <span className="font-semibold">{user.parentCommunityName}</span>
+                </div>
+              ) : null}
+              {canEditProfile && (
+                <div className="mt-1">
+                  <a 
+                    href="/community-admin/settings"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-lg font-semibold transition-colors shadow-sm"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> Edit Community Profile
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </AnimatedCard>
         {/* Pending Subsidiaries Widget (Visible only to Parent Community Admins when pending exists) */}
-        {user?.role === "community_admin" && subsidiaries.length > 0 && (
+        {user?.role === "community_admin" && canManageCommunities && subsidiaries.length > 0 && (
           <div className="mb-8">
             <AnimatedCard className="overflow-hidden border border-amber-200 bg-amber-50/10">
               <div className="p-5 border-b border-amber-200 bg-amber-50/30 flex items-center justify-between flex-wrap gap-2">
@@ -142,89 +221,110 @@ export const Route = createFileRoute("/community-admin/")({
           </div>
         )}
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
-          <StatCard icon={<Users />} label="Total Members" value={1240} accent="primary" />
-          <StatCard icon={<UserCheck />} label="Pending Approvals" value={18} accent="gold" />
-          <StatCard icon={<Calendar />} label="Active Events" value={6} accent="teal" />
-          <StatCard icon={<HandHeart />} label="Donations (₹)" value={1840000} accent="primary" />
-          <StatCard icon={<UsersRound />} label="Families" value={342} accent="gold" />
-          <StatCard icon={<Building2 />} label="Businesses" value={48} accent="teal" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-8">
+          {hasPermission(user, ["View Members"]) && <StatCard icon={<Users />} label="Total Members" value={membersList.length} accent="primary" />}
+          {hasPermission(user, ["View Members"]) && <StatCard icon={<UserCheck />} label="Pending Approvals" value={membersList.filter(m => m.status === "Pending").length} accent="gold" />}
+          {hasPermission(user, ["View Events"]) && <StatCard icon={<Calendar />} label="Active Events" value={6} accent="teal" />}
+          {hasPermission(user, ["View Donations"]) && <StatCard icon={<HandHeart />} label="Donations (₹)" value={184000} accent="primary" />}
+          {canManageCommunities && <StatCard icon={<Building2 />} label="Subsidiaries" value={communities.filter(c => String(c.parent) === String(user?.communityId)).length} accent="teal" />}
+          {hasPermission(user, ["View Families"]) && <StatCard icon={<UsersRound />} label="Families" value={Math.floor(membersList.length / 4)} accent="gold" />}
+          {hasPermission(user, ["View Businesses"]) && <StatCard icon={<Building2 />} label="Businesses" value={18} accent="teal" />}
         </div>
 
+        <AdBanner slot="Hero Banner" />
+
         <div className="grid lg:grid-cols-2 gap-5 mb-6">
-          <AnimatedCard className="p-5">
-            <h3 className="font-ui font-semibold mb-3">Member growth (6 months)</h3>
-            <div className="h-64">
-              <ResponsiveContainer>
-                <LineChart data={growth}>
-                  <CartesianGrid stroke="#E2D9CC" strokeDasharray="3 3" />
-                  <XAxis dataKey="m" stroke="#6B5E4E" fontSize={11} />
-                  <YAxis stroke="#6B5E4E" fontSize={11} />
-                  <Tooltip {...tooltip} />
-                  <Line type="monotone" dataKey="v" stroke="oklch(0.46 0.21 265)" strokeWidth={2.5} dot={{ fill: "oklch(0.46 0.21 265)", r: 4 }} isAnimationActive />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </AnimatedCard>
-          <AnimatedCard className="p-5">
-            <h3 className="font-ui font-semibold mb-3">Monthly donations</h3>
-            <div className="h-64">
-              <ResponsiveContainer>
-                <BarChart data={donations}>
-                  <CartesianGrid stroke="#E2D9CC" strokeDasharray="3 3" />
-                  <XAxis dataKey="m" stroke="#6B5E4E" fontSize={11} />
-                  <YAxis stroke="#6B5E4E" fontSize={11} />
-                  <Tooltip {...tooltip} />
-                  <Bar dataKey="v" fill="oklch(0.68 0.14 75)" radius={[8,8,0,0]} isAnimationActive />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </AnimatedCard>
+          {hasPermission(user, ["View Members"]) && (
+            <AnimatedCard className="p-5">
+              <h3 className="font-ui font-semibold mb-3">Member growth (6 months)</h3>
+              <div className="h-64">
+                <ResponsiveContainer>
+                  <LineChart data={growth}>
+                    <CartesianGrid stroke="#E2D9CC" strokeDasharray="3 3" />
+                    <XAxis dataKey="m" stroke="#6B5E4E" fontSize={11} />
+                    <YAxis stroke="#6B5E4E" fontSize={11} />
+                    <Tooltip {...tooltip} />
+                    <Line type="monotone" dataKey="v" stroke="oklch(0.46 0.21 265)" strokeWidth={2.5} dot={{ fill: "oklch(0.46 0.21 265)", r: 4 }} isAnimationActive />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </AnimatedCard>
+          )}
+          {hasPermission(user, ["View Donations"]) && (
+            <AnimatedCard className="p-5">
+              <h3 className="font-ui font-semibold mb-3">Monthly donations</h3>
+              <div className="h-64">
+                <ResponsiveContainer>
+                  <BarChart data={donations}>
+                    <CartesianGrid stroke="#E2D9CC" strokeDasharray="3 3" />
+                    <XAxis dataKey="m" stroke="#6B5E4E" fontSize={11} />
+                    <YAxis stroke="#6B5E4E" fontSize={11} />
+                    <Tooltip {...tooltip} />
+                    <Bar dataKey="v" fill="oklch(0.68 0.14 75)" radius={[8,8,0,0]} isAnimationActive />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </AnimatedCard>
+          )}
         </div>
 
         <div className="grid lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
-            <AnimatedCard className="overflow-hidden">
-              <div className="p-5 border-b border-warm">
-                <h3 className="font-ui font-semibold">Pending Member Approvals</h3>
-              </div>
-              <table className="w-full text-sm">
-                <tbody>
-                  {MEMBERS.filter(m => m.status === "Pending").slice(0, 6).map(m => (
-                    <tr key={m.id} className="border-t border-warm">
-                      <td className="p-3 flex items-center gap-2">
-                        <AvatarCircle name={m.name} src={m.avatar} size={32} />
-                        <div>
-                          <div className="font-medium">{m.name}</div>
-                          <div className="text-xs text-warm-muted">{m.phone}</div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-xs">{m.joinedDate}</td>
-                      <td className="p-3 text-right">
-                        <button className="px-2 py-1 rounded bg-teal text-white text-xs mr-1"><CheckCircle className="w-3 h-3 inline" /></button>
-                        <button className="px-2 py-1 rounded bg-red-500 text-white text-xs mr-1"><XCircle className="w-3 h-3 inline" /></button>
-                        <button className="px-2 py-1 rounded bg-amber-500 text-white text-xs"><AlertCircle className="w-3 h-3 inline" /></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </AnimatedCard>
-          </div>
-          <AnimatedCard className="p-5">
-            <h3 className="font-ui font-semibold mb-3">Recent activity</h3>
-            <div className="space-y-3 text-sm">
-              {NEWS.slice(0,5).map(n => (
-                <div key={n.id} className="flex gap-2">
-                  <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
-                  <div>
-                    <div className="font-medium line-clamp-1">{n.title}</div>
-                    <div className="text-xs text-warm-muted">{n.date}</div>
-                  </div>
+          {hasPermission(user, ["View Members"]) && (
+            <div className="lg:col-span-2">
+              <AnimatedCard className="overflow-hidden h-full">
+                <div className="p-5 border-b border-warm">
+                  <h3 className="font-ui font-semibold">Pending Member Approvals</h3>
                 </div>
-              ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {membersList.filter(m => m.status === "Pending").slice(0, 6).map(m => (
+                        <tr key={m.id} className="border-t border-warm">
+                          <td className="p-3 flex items-center gap-2">
+                            <AvatarCircle name={m.name} src={m.avatar} size={32} />
+                            <div>
+                              <div className="font-medium">{m.name}</div>
+                              <div className="text-xs text-warm-muted">{m.phone}</div>
+                            </div>
+                          </td>
+                          <td className="p-3 text-xs">{m.created_at ? new Date(m.created_at).toLocaleDateString() : 'N/A'}</td>
+                          {canApproveMembers && (
+                            <td className="p-3 text-right">
+                              <button className="px-2 py-1 rounded bg-teal text-white text-xs mr-1"><CheckCircle className="w-3 h-3 inline" /></button>
+                              <button className="px-2 py-1 rounded bg-red-500 text-white text-xs mr-1"><XCircle className="w-3 h-3 inline" /></button>
+                              <button className="px-2 py-1 rounded bg-amber-500 text-white text-xs"><AlertCircle className="w-3 h-3 inline" /></button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                      {membersList.filter(m => m.status === "Pending").length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="p-6 text-center text-warm-muted">No pending approvals.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </AnimatedCard>
             </div>
-          </AnimatedCard>
+          )}
+          {hasPermission(user, ["View News"]) && (
+            <AnimatedCard className="p-5 lg:col-span-1">
+              <h3 className="font-ui font-semibold mb-3">Recent activity</h3>
+              <div className="space-y-3 text-sm">
+                {newsList.slice(0,5).map(n => (
+                  <div key={n.id} className="flex gap-2">
+                    <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
+                    <div>
+                      <div className="font-medium line-clamp-1">{n.title}</div>
+                      <div className="text-xs text-warm-muted">{n.created_at ? new Date(n.created_at).toLocaleDateString() : 'N/A'}</div>
+                    </div>
+                  </div>
+                ))}
+                {newsList.length === 0 && <div className="text-warm-muted text-center py-4">No recent activity</div>}
+              </div>
+            </AnimatedCard>
+          )}
         </div>
 
         {/* Detailed Drawer for Subsidiary Approval review */}

@@ -5,6 +5,7 @@ import { PageWrap } from "@/components/wag/PageWrap";
 import { AnimatedCard, AvatarCircle, Modal } from "@/components/wag/primitives";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { calculateAge } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard/family")({
   component: FamilyPage,
@@ -26,6 +27,7 @@ function FamilyPage() {
     business_name: "", business_category: "", gst_no: "", business_years: ""
   });
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [birthdateError, setBirthdateError] = useState("");
 
   // Flatten all family members across all families for display
   const allMembers = families.flatMap(f =>
@@ -50,6 +52,17 @@ function FamilyPage() {
 
   const handleAdd = async () => {
     if (!form.name.trim()) return;
+
+    if (form.birthdate) {
+      const birthDate = new Date(form.birthdate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (birthDate > today) {
+        alert("Birthdate cannot be in the future.");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       // Find or create the family group for this user
@@ -126,11 +139,27 @@ function FamilyPage() {
 
   const openEdit = (m: any) => {
     setEditingId(m.id);
+    const initialBirthdate = m.birthdate || "";
+    let initialAge = "";
+    let initialError = "";
+
+    if (initialBirthdate) {
+      const birthDate = new Date(initialBirthdate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (birthDate > today) {
+        initialError = "Birthdate cannot be in the future.";
+      } else {
+        initialAge = m.age ? m.age.toString() : calculateAge(initialBirthdate);
+      }
+    }
+
+    setBirthdateError(initialError);
     setForm({
       name: m.name || "",
       relation: m.relation || "Spouse",
-      birthdate: m.birthdate || "",
-      age: m.age ? m.age.toString() : "",
+      birthdate: initialBirthdate,
+      age: initialAge,
       occupation: m.occupation || "",
       education: m.education || "",
       school: m.school || "",
@@ -153,18 +182,36 @@ function FamilyPage() {
 
   const handleBirthdateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    const update = { ...form, birthdate: val };
-    if (val) {
-      const birth = new Date(val);
-      const today = new Date();
-      let age = today.getFullYear() - birth.getFullYear();
-      const m = today.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-        age--;
-      }
-      update.age = age > 0 ? age.toString() : "0";
+    if (!val) {
+      setBirthdateError("");
+      setForm(prev => ({
+        ...prev,
+        birthdate: "",
+        age: ""
+      }));
+      return;
     }
-    setForm(update);
+
+    const birthDate = new Date(val);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (birthDate > today) {
+      setBirthdateError("Birthdate cannot be in the future.");
+      setForm(prev => ({
+        ...prev,
+        birthdate: val,
+        age: ""
+      }));
+    } else {
+      setBirthdateError("");
+      const calculatedAge = calculateAge(val);
+      setForm(prev => ({
+        ...prev,
+        birthdate: val,
+        age: calculatedAge
+      }));
+    }
   };
 
   return (
@@ -175,6 +222,7 @@ function FamilyPage() {
         <button
           onClick={() => {
             setEditingId(null);
+            setBirthdateError("");
             setForm({ 
               name: "", relation: "Spouse", birthdate: "", age: "", occupation: "",
               education: "", school: "", college: "", degree: "", field_of_study: "", passing_year: "",
@@ -292,6 +340,9 @@ function FamilyPage() {
                 onChange={handleBirthdateChange}
                 className="w-full px-3 py-2.5 rounded-xl border border-warm bg-surface focus:outline-none focus:border-primary text-sm transition"
               />
+              {birthdateError && (
+                <p className="text-red-500 text-xs font-semibold mt-1">{birthdateError}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-warm-muted uppercase tracking-wider mb-1">Age (Auto-filled)</label>
@@ -301,8 +352,8 @@ function FamilyPage() {
                 min={0}
                 max={120}
                 value={form.age}
-                onChange={e => setForm({ ...form, age: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl border border-warm bg-surface focus:outline-none focus:border-primary text-sm transition bg-gray-50"
+                readOnly
+                className="w-full px-3 py-2.5 rounded-xl border border-warm bg-sand/30 cursor-not-allowed opacity-75 focus:outline-none text-sm transition"
               />
             </div>
           </div>

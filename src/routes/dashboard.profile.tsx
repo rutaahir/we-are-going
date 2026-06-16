@@ -6,6 +6,7 @@ import { PageWrap } from "@/components/wag/PageWrap";
 import { AnimatedCard, AvatarCircle, PlanBadge } from "@/components/wag/primitives";
 import { api } from "@/lib/api";
 import { AnimatePresence, motion } from "framer-motion";
+import { calculateAge } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard/profile")({
   component: ProfilePage,
@@ -21,6 +22,7 @@ function ProfilePage() {
   const [editForm, setEditForm] = useState<any>({});
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [birthdateError, setBirthdateError] = useState("");
 
   const fetchProfile = async () => {
     try {
@@ -37,12 +39,28 @@ function ProfilePage() {
 
   const openEdit = () => {
     const m = member || {};
+    const initialBirthdate = m.birthdate || "";
+    let initialAge = "";
+    let initialError = "";
+
+    if (initialBirthdate) {
+      const birthDate = new Date(initialBirthdate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (birthDate > today) {
+        initialError = "Birthdate cannot be in the future.";
+      } else {
+        initialAge = m.age ? String(m.age) : calculateAge(initialBirthdate);
+      }
+    }
+
+    setBirthdateError(initialError);
     setEditForm({
       name: m.name || user?.name || "",
       email: m.email || user?.email || "",
       phone: m.phone || "",
-      birthdate: m.birthdate || "",
-      age: m.age ? String(m.age) : "",
+      birthdate: initialBirthdate,
+      age: initialAge,
       gender: m.gender || "Male",
       state: m.state || "Gujarat",
       district: m.district || "Amreli",
@@ -74,6 +92,16 @@ function ProfilePage() {
     if (!member?.id) return alert("Member profile not found.");
     if (!editForm.name.trim()) return alert("Full Name is required.");
     if (!editForm.phone.trim()) return alert("Mobile number is required.");
+    
+    if (editForm.birthdate) {
+      const birthDate = new Date(editForm.birthdate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (birthDate > today) {
+        return alert("Birthdate cannot be in the future.");
+      }
+    }
+
     const cleanAadhaar = (editForm.aadhaar || "").replace(/\D/g, "");
     if (cleanAadhaar && cleanAadhaar.length !== 12) return alert("Aadhaar must be exactly 12 digits.");
 
@@ -110,18 +138,36 @@ function ProfilePage() {
   };
 
   const handleBirthdateChange = (v: string) => {
-    const update: any = { ...editForm, birthdate: v };
-    if (v) {
-      const birth = new Date(v);
-      const today = new Date();
-      let age = today.getFullYear() - birth.getFullYear();
-      const m = today.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-        age--;
-      }
-      update.age = age > 0 ? String(age) : "0";
+    if (!v) {
+      setBirthdateError("");
+      setEditForm((prev: any) => ({
+        ...prev,
+        birthdate: "",
+        age: ""
+      }));
+      return;
     }
-    setEditForm(update);
+
+    const birthDate = new Date(v);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (birthDate > today) {
+      setBirthdateError("Birthdate cannot be in the future.");
+      setEditForm((prev: any) => ({
+        ...prev,
+        birthdate: v,
+        age: ""
+      }));
+    } else {
+      setBirthdateError("");
+      const calculatedAge = calculateAge(v);
+      setEditForm((prev: any) => ({
+        ...prev,
+        birthdate: v,
+        age: calculatedAge
+      }));
+    }
   };
 
   const f = (label: string, val: any, Icon?: any) => ({ label, val: val || "N/A", Icon });
@@ -147,9 +193,11 @@ function ProfilePage() {
             alt="" className="w-full h-full object-cover mix-blend-overlay opacity-50"
           />
         </div>
-        <div className="px-6 pb-6 -mt-12 flex flex-col sm:flex-row items-start sm:items-end gap-4">
-          <AvatarCircle name={member?.name || user?.name || "U"} src={member?.avatar || user?.avatar} size={100} />
-          <div className="flex-1 min-w-0">
+        <div className="px-6 pb-6 -mt-12 flex flex-col sm:flex-row items-start sm:items-end gap-4 relative z-10">
+          <div className="relative rounded-full border-4 border-white bg-white shadow-sm shrink-0 mt-2 sm:mt-0">
+            <AvatarCircle name={member?.name || user?.name || "U"} src={member?.avatar || user?.avatar} size={100} />
+          </div>
+          <div className="flex-1 min-w-0 sm:pb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-ui font-bold text-xl truncate">{member?.name || user?.name}</h2>
               <ShieldCheck className="w-5 h-5 text-teal shrink-0" />
@@ -307,8 +355,13 @@ function ProfilePage() {
                             <EF label="Full Name *" type="text" value={editForm.name} onChange={v => setEditForm({ ...editForm, name: v })} />
                             <EF label="Email *" type="email" value={editForm.email} onChange={v => setEditForm({ ...editForm, email: v })} />
                             <EF label="Mobile Number *" type="text" value={editForm.phone} onChange={v => setEditForm({ ...editForm, phone: v })} />
-                            <EF label="Birthdate" type="date" value={editForm.birthdate} onChange={handleBirthdateChange} />
-                            <EF label="Age (Auto-filled)" type="number" value={editForm.age} onChange={v => setEditForm({ ...editForm, age: v })} />
+                            <div>
+                              <EF label="Birthdate" type="date" value={editForm.birthdate} onChange={handleBirthdateChange} />
+                              {birthdateError && (
+                                <p className="text-red-500 text-xs font-semibold mt-1">{birthdateError}</p>
+                              )}
+                            </div>
+                            <EF label="Age (Auto-filled)" type="number" value={editForm.age} readOnly={true} onChange={() => {}} />
                             <div>
                               <label className="block text-xs font-semibold text-warm-muted uppercase tracking-wider mb-1">Gender</label>
                               <select value={editForm.gender} onChange={e => setEditForm({ ...editForm, gender: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-warm bg-white text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20">
@@ -413,8 +466,8 @@ function InfoField({ label, value, Icon }: { label: string; value: string; Icon?
   );
 }
 
-function EF({ label, type = "text", value, onChange, placeholder = "", maxLength }: {
-  label: string; type?: string; value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number;
+function EF({ label, type = "text", value, onChange, placeholder = "", maxLength, readOnly, className = "" }: {
+  label: string; type?: string; value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number; readOnly?: boolean; className?: string;
 }) {
   return (
     <div>
@@ -425,7 +478,10 @@ function EF({ label, type = "text", value, onChange, placeholder = "", maxLength
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         maxLength={maxLength}
-        className="w-full px-3 py-2.5 rounded-xl border border-warm bg-white text-sm font-medium focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition"
+        readOnly={readOnly}
+        className={`w-full px-3 py-2.5 rounded-xl border border-warm text-sm font-medium focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition ${
+          readOnly ? "bg-sand/30 cursor-not-allowed opacity-75 focus:ring-0 focus:border-warm" : "bg-white"
+        } ${className}`}
       />
     </div>
   );

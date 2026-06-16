@@ -1,15 +1,16 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef, type TouchEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Users, Calendar, Building2, Briefcase, Heart, MapPin, 
+import {
+  Users, Calendar, Building2, Briefcase, Heart, MapPin,
   ArrowRight, Star, Sparkles, HandHeart, Check, FileText, Download,
   LayoutDashboard, Newspaper, Image as ImageIcon, Video, Network, Settings,
   Search, Bell, Globe, ChevronDown, Plus, Play, User, X, Mail, Phone, Home as HomeIcon,
+  ChevronLeft, ChevronRight,
   ShieldCheck, ArrowUpRight, Loader
 } from "lucide-react";
 import { COMMUNITIES, EVENTS, MATRIMONY, BUSINESSES, JOBS, NEWS } from "@/data/mock";
-import { api } from "@/lib/api";
+import { api, getImageUrl } from "@/lib/api";
 import heroBg from "@/assets/hero-bg.png";
 import { toast } from "sonner";
 
@@ -23,11 +24,13 @@ export const Route = createFileRoute("/")({
       page: search.page as string || undefined,
     };
   },
-  head: () => ({ meta: [
-    { title: "We Are Samaj — Apni Samaj, Apna Network" },
-    { name: "description", content: "Community ERP and social network for Indian samaj communities — manage members, events, matrimony, jobs and donations on one platform." },
-    { property: "og:title", content: "We Are Samaj — Connect Your Samaj Digitally" },
-  ]}),
+  head: () => ({
+    meta: [
+      { title: "We Are Samaj — Apni Samaj, Apna Network" },
+      { name: "description", content: "Community ERP and social network for Indian samaj communities — manage members, events, matrimony, jobs and donations on one platform." },
+      { property: "og:title", content: "We Are Samaj — Connect Your Samaj Digitally" },
+    ]
+  }),
   component: DashboardStyleHome,
 });
 
@@ -55,6 +58,17 @@ function DashboardStyleHome() {
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [selectedCity, setSelectedCity] = useState("Ahmedabad");
   const [lang, setLang] = useState("EN");
+  const [samacharPaused, setSamacharPaused] = useState(false);
+  const [jobsPaused, setJobsPaused] = useState(false);
+  const [partnerIndex, setPartnerIndex] = useState(0);
+  const [partnerPaused, setPartnerPaused] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [galleryPaused, setGalleryPaused] = useState(false);
+  const [galleryLoading, setGalleryLoading] = useState(true);
+  const [videoIndex, setVideoIndex] = useState(0);
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const eventTrackRef = useRef<HTMLDivElement | null>(null);
 
   const handleNavClick = (label: string) => {
     const pageVal = label === "Dashboard" ? undefined : label.toLowerCase().replace(/\s+/g, "-");
@@ -78,7 +92,64 @@ function DashboardStyleHome() {
       setActiveNav("Dashboard");
     }
   }, [page]);
-  
+
+  useEffect(() => {
+    if (partnerPaused) return;
+
+    const timer = window.setInterval(() => {
+      setPartnerIndex((prev) => (prev + 1) % PARTNERS.length);
+    }, 3200);
+
+    return () => window.clearInterval(timer);
+  }, [partnerPaused]);
+
+  useEffect(() => {
+    if (galleryPaused) return;
+    const timer = window.setInterval(() => {
+      setGalleryIndex((prev) => (prev + 1) % GALLERY_IMAGES.length);
+    }, 4200);
+
+    return () => window.clearInterval(timer);
+  }, [galleryPaused]);
+
+  useEffect(() => {
+    setGalleryLoading(true);
+  }, [galleryIndex]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setVideoIndex((prev) => (prev + 1) % POPULAR_VIDEOS.length);
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setHighlightIndex((prev) => (prev + 1) % HIGHLIGHTS.length);
+    }, 2600);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const activeHighlight = HIGHLIGHTS[highlightIndex];
+  const activeVideo = POPULAR_VIDEOS[videoIndex];
+  const activeGallery = GALLERY_IMAGES[galleryIndex];
+
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const start = touchStartX.current;
+    const end = event.changedTouches[0]?.clientX ?? null;
+    if (start === null || end === null) return;
+    const delta = start - end;
+    if (Math.abs(delta) < 40) return;
+    setGalleryIndex((prev) => (prev + (delta > 0 ? 1 : -1) + GALLERY_IMAGES.length) % GALLERY_IMAGES.length);
+    touchStartX.current = null;
+  };
+
   // Data states - loading from API
   const [communities, setCommunities] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
@@ -123,10 +194,37 @@ function DashboardStyleHome() {
 
   // Form states
   const [newJob, setNewJob] = useState({ role: "", company: "", location: "", desc: "", salary: "" });
-  const [donateAmount, setDonateAmount] = useState<{[key: string]: string}>({});
+  const [donateAmount, setDonateAmount] = useState<{ [key: string]: string }>({});
   const [dirSearchTab, setDirSearchTab] = useState<"members" | "businesses" | "contacts">("members");
   const [dirQuery, setDirQuery] = useState("");
   const [dirLocation, setDirLocation] = useState("All Locations");
+
+  const visibleJobs = (jobList.length ? jobList : DASHBOARD_JOBS).slice(0, 4);
+  const newsFeed = useMemo(() => {
+    return news.length > 0 ? news.map((n: any) => ({
+      id: n.id,
+      title: n.title,
+      img: n.img || n.img_url,
+      location: n.location || "Gujarat",
+      time: n.time || (n.created_at ? new Date(n.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "Just now")
+    })) : SAMACHAR_ITEMS;
+  }, [news]);
+  const quickAccessItems = sidebarItems
+    .filter((item) => ["Samachar", "Matrimony", "Jobs", "Events", "Directory", "Gallery", "Videos", "Donations"].includes(item.label))
+    .map((item, index) => ({
+      label: item.label,
+      icon: item.icon,
+      color: [
+        "bg-[#FFF5EE] text-[#F97316] hover:bg-[#FDF2E9]",
+        "bg-red-50 text-red-500 hover:bg-red-100/50",
+        "bg-amber-50 text-amber-600 hover:bg-amber-100/50",
+        "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/50",
+        "bg-blue-50 text-blue-600 hover:bg-blue-100/50",
+        "bg-purple-50 text-purple-600 hover:bg-purple-100/50",
+        "bg-pink-50 text-pink-500 hover:bg-pink-100/50",
+        "bg-[#FDF2E9] text-[#F97316] hover:bg-[#FBE9DC]",
+      ][index % 8],
+    }));
 
   // Load data from API on mount
   useEffect(() => {
@@ -134,14 +232,14 @@ function DashboardStyleHome() {
       try {
         setLoading(true);
         const [
-          communitiesData, 
-          eventsData, 
-          jobsData, 
-          businessesData, 
-          matrimonyData, 
-          newsData, 
-          campaignsData, 
-          donationsData, 
+          communitiesData,
+          eventsData,
+          jobsData,
+          businessesData,
+          matrimonyData,
+          newsData,
+          campaignsData,
+          donationsData,
           familiesData
         ] = await Promise.all([
           api.getCommunities(),
@@ -179,8 +277,8 @@ function DashboardStyleHome() {
         // Initialize interactive lists
         setCommunityList(communitiesData.map(c => ({ ...c, joined: false, member_count: c.member_count || 150 })));
         setJobList(jobsData.map(j => ({ ...j, logo: j.logo ?? j.logo_letter ?? (j.company ? j.company.charAt(0).toUpperCase() : "J"), applied: false })));
-        setEventList(eventsData.map(e => ({ 
-          ...e, 
+        setEventList(eventsData.map(e => ({
+          ...e,
           registered: registrationsData.some((r: any) => r.event === e.id)
         })));
         setMatrimonyList(matrimonyData.map(m => ({ ...m, interested: false })));
@@ -197,6 +295,18 @@ function DashboardStyleHome() {
     };
 
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      console.log("\n[COMPONENT REFRESHED]\nCommunity Card\n");
+      api.getCommunities().then(res => {
+        setCommunities(res);
+        setCommunityList(res.map(c => ({ ...c, joined: false, member_count: c.member_count || 150 })));
+      });
+    };
+    window.addEventListener("community-updated", handleUpdate);
+    return () => window.removeEventListener("community-updated", handleUpdate);
   }, []);
 
   const downloadReceiptPdf = (receipt: any) => {
@@ -306,14 +416,13 @@ function DashboardStyleHome() {
                 <button
                   key={item.label}
                   onClick={() => handleNavClick(item.label)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative ${
-                    active 
-                      ? "bg-[#FDF2E9] text-[#F97316] font-bold shadow-sm" 
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative ${active
+                      ? "bg-[#FDF2E9] text-[#F97316] font-bold shadow-sm"
                       : "text-[#5C4033] hover:bg-[#F3E8DE]/60 hover:text-[#3E2723]"
-                  }`}
+                    }`}
                 >
                   {active && (
-                    <motion.div 
+                    <motion.div
                       layoutId="sidebarActiveBar"
                       className="absolute left-0 top-2.5 bottom-2.5 w-[3px] bg-[#F97316] rounded-r-full"
                       transition={{ type: "spring", stiffness: 380, damping: 30 }}
@@ -351,9 +460,9 @@ function DashboardStyleHome() {
           {/* Search bar */}
           <div className="relative w-full max-w-md hidden sm:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
-            <input 
-              type="text" 
-              placeholder="Search communities, news, events, members..." 
+            <input
+              type="text"
+              placeholder="Search communities, news, events, members..."
               className="w-full pl-9 pr-12 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316] text-[#3E2723] placeholder-[#8C6D58]/60 transition duration-200"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-[#8C6D58]/60 bg-[#FAF3EC] border border-[#EBE3DB] px-1.5 py-0.5 rounded font-mono select-none">
@@ -364,14 +473,14 @@ function DashboardStyleHome() {
           <div className="flex items-center gap-4 ml-auto">
             {/* Location selector dropdown */}
             <div className="relative">
-              <select 
+              <select
                 value={selectedCity}
                 onChange={(e) => setSelectedCity(e.target.value)}
                 className="flex items-center gap-1.5 pl-8 pr-8 py-1.5 rounded-full bg-[#FFF8F2] border border-[#EBE3DB] text-xs font-semibold text-[#3E2723] hover:bg-[#FDF2E9] focus:outline-none focus:ring-1 focus:ring-[#F97316] appearance-none cursor-pointer transition duration-200"
-                style={{ 
-                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%238C6D58' stroke-width='2' viewBox='0 0 24 24'><path d='M6 9l6 6 6-6'/></svg>")`, 
-                  backgroundPosition: 'right 10px center', 
-                  backgroundRepeat: 'no-repeat' 
+                style={{
+                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%238C6D58' stroke-width='2' viewBox='0 0 24 24'><path d='M6 9l6 6 6-6'/></svg>")`,
+                  backgroundPosition: 'right 10px center',
+                  backgroundRepeat: 'no-repeat'
                 }}
               >
                 <option value="Ahmedabad">Ahmedabad</option>
@@ -386,12 +495,11 @@ function DashboardStyleHome() {
             {/* LanguageSelector */}
             <div className="flex items-center gap-1 bg-[#FFF8F2] border border-[#EBE3DB] rounded-full p-0.5 shadow-2xs">
               {(["EN", "GU", "HI"] as const).map(l => (
-                <button 
-                  key={l} 
-                  onClick={() => setLang(l)} 
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition duration-200 ${
-                    lang === l ? "bg-[#F97316] text-white" : "text-[#8C6D58] hover:text-[#3E2723]"
-                  }`}
+                <button
+                  key={l}
+                  onClick={() => setLang(l)}
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition duration-200 ${lang === l ? "bg-[#F97316] text-white" : "text-[#8C6D58] hover:text-[#3E2723]"
+                    }`}
                 >
                   {l}
                 </button>
@@ -408,13 +516,13 @@ function DashboardStyleHome() {
 
             {/* User avatar + Hi, Rajesh */}
             <div className="relative">
-              <button 
-                onClick={() => setShowProfileDropdown(!showProfileDropdown)} 
+              <button
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                 className="flex items-center gap-2 border-l border-[#EBE3DB] pl-4 hover:opacity-85 transition duration-200 cursor-pointer"
               >
-                <img 
-                  src={userProfile.avatar} 
-                  alt="Profile" 
+                <img
+                  src={userProfile.avatar}
+                  alt="Profile"
                   className="w-8 h-8 rounded-full object-cover border border-[#F97316] shadow-sm"
                 />
                 <div className="hidden md:block leading-tight text-left">
@@ -424,12 +532,12 @@ function DashboardStyleHome() {
                   </div>
                 </div>
               </button>
-              
+
               {showProfileDropdown && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setShowProfileDropdown(false)} />
                   <div className="absolute right-0 mt-2 w-48 bg-white border border-[#EBE3DB] rounded-2xl shadow-xl py-2 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <button 
+                    <button
                       onClick={() => {
                         handleNavClick("Settings");
                         setShowProfileDropdown(false);
@@ -439,7 +547,7 @@ function DashboardStyleHome() {
                       <User className="w-3.5 h-3.5 text-[#F97316]" />
                       My Profile
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
                         setShowProfileDropdown(false);
                         toast.info("Logged out successfully");
@@ -464,70 +572,34 @@ function DashboardStyleHome() {
             <AnimatePresence mode="wait">
               {activeNav === "Dashboard" && (
                 <motion.div key="dash" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-                  
+
                   {/* Hero Banner with Image Background */}
-                  <div 
-                    className="relative rounded-[24px] bg-[#FAF3EC] p-6 sm:p-7 overflow-hidden min-h-[240px] flex items-center shadow-sm border border-[#EBE3DB] bg-cover bg-center"
+                  <div
+                    className="relative rounded-[24px] bg-[#FAF3EC] p-6 sm:p-7 overflow-hidden min-h-[200px] md:min-h-[240px] flex items-center shadow-sm border border-[#EBE3DB] bg-cover bg-center"
                     style={{ backgroundImage: `url(${heroBg})` }}
                   >
                     {/* Glowing background highlights for depth */}
                     <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-[#F97316]/5 rounded-full blur-3xl pointer-events-none z-0" />
                     <div className="absolute bottom-[-50px] left-[10%] w-48 h-48 bg-amber-500/5 rounded-full blur-3xl pointer-events-none z-0" />
 
-                    <div className="relative z-10 max-w-2xl space-y-4 text-left">
-                      <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#3E2723] leading-tight">
-                        Connect. Empower. Grow.<br />
-                        <span className="text-[#F97316]">Stronger Together!</span>
-                      </h2>
-                      <p className="text-xs text-[#5C4033]/85 max-w-sm leading-relaxed font-medium">
-                        Your one-stop platform for news, events, community, matrimony, jobs & everything in between.
-                      </p>
-                      <div className="pt-2 flex items-center gap-3">
-                        <button onClick={() => handleNavClick("Communities")} className="px-5 py-2.5 text-xs rounded-xl bg-gradient-to-r from-[#F97316] to-[#EA580C] text-white font-bold hover:shadow-lg hover:shadow-[#F97316]/20 transition-all duration-300 transform active:scale-95 cursor-pointer">
+                    <div className="relative z-10 w-full grid grid-cols-1 md:grid-cols-[1.2fr_0.8fr] gap-6 items-center">
+                      <div className="space-y-4 text-left">
+                        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#3E2723] leading-tight">
+                          Connect. Empower. Grow.<br />
+                          <span className="text-[#F97316]">Stronger Together!</span>
+                        </h2>
+                        <p className="text-xs text-[#5C4033]/85 max-w-sm leading-relaxed font-medium">
+                          Your one-stop platform for news, events, community, matrimony, jobs & everything in between.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-row md:justify-end items-center gap-2 sm:gap-3 w-full">
+                        <button onClick={() => handleNavClick("Communities")} className="px-3 sm:px-5 py-2.5 text-[10px] sm:text-xs rounded-xl bg-gradient-to-r from-[#F97316] to-[#EA580C] text-white font-bold hover:shadow-lg hover:shadow-[#F97316]/20 transition-all duration-300 transform active:scale-95 cursor-pointer whitespace-nowrap text-center">
                           Explore Communities
                         </button>
-                        <Link to="/register/community" className="px-5 py-2.5 text-xs rounded-xl border border-[#F97316] text-[#F97316] hover:bg-[#F97316] hover:text-white font-bold transition-all duration-300 transform active:scale-95 flex items-center gap-1 bg-white/70 backdrop-blur-xs shadow-2xs">
+                        <Link to="/register/community" className="px-3 sm:px-5 py-2.5 text-[10px] sm:text-xs rounded-xl border border-[#F97316] text-[#F97316] hover:bg-[#F97316] hover:text-white font-bold transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-1 bg-white/70 backdrop-blur-xs shadow-2xs whitespace-nowrap">
                           <Plus className="w-3.5 h-3.5" /> Register Your Community
                         </Link>
-                      </div>
-                    </div>
-
-                    {/* Stats Overlay Bar inside Hero */}
-                    <div className="absolute bottom-4 left-6 right-6 hidden lg:flex items-center justify-between bg-white/80 backdrop-blur-md border border-[#EBE3DB]/60 rounded-2xl px-6 py-2.5 z-10">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-[#FAF3EC] text-[#F97316] flex items-center justify-center border border-[#EBE3DB]/40"><Building2 className="w-4 h-4" /></div>
-                        <div>
-                          <div className="text-xs font-extrabold text-[#3E2723]">540+</div>
-                          <div className="text-[9px] text-warm-muted font-medium">Communities</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2.5 border-l border-[#EBE3DB]/60 pl-6">
-                        <div className="w-8 h-8 rounded-xl bg-[#FAF3EC] text-[#F97316] flex items-center justify-center border border-[#EBE3DB]/40"><Users className="w-4 h-4" /></div>
-                        <div>
-                          <div className="text-xs font-extrabold text-[#3E2723]">1.2M+</div>
-                          <div className="text-[9px] text-warm-muted font-medium">Members</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2.5 border-l border-[#EBE3DB]/60 pl-6">
-                        <div className="w-8 h-8 rounded-xl bg-[#FAF3EC] text-[#F97316] flex items-center justify-center border border-[#EBE3DB]/40"><Globe className="w-4 h-4" /></div>
-                        <div>
-                          <div className="text-xs font-extrabold text-[#3E2723]">22</div>
-                          <div className="text-[9px] text-warm-muted font-medium">States</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2.5 border-l border-[#EBE3DB]/60 pl-6">
-                        <div className="w-8 h-8 rounded-xl bg-[#FAF3EC] text-[#F97316] flex items-center justify-center border border-[#EBE3DB]/40"><Calendar className="w-4 h-4" /></div>
-                        <div>
-                          <div className="text-xs font-extrabold text-[#3E2723]">28,400+</div>
-                          <div className="text-[9px] text-warm-muted font-medium">Events</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2.5 border-l border-[#EBE3DB]/60 pl-6">
-                        <div className="w-8 h-8 rounded-xl bg-[#FAF3EC] text-[#F97316] flex items-center justify-center border border-[#EBE3DB]/40"><HandHeart className="w-4 h-4" /></div>
-                        <div>
-                          <div className="text-xs font-extrabold text-[#3E2723]">42Cr+</div>
-                          <div className="text-[9px] text-warm-muted font-medium">Donations</div>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -536,7 +608,7 @@ function DashboardStyleHome() {
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                     {/* Left main column: Spans 9 of 12 columns */}
                     <div className="xl:col-span-9 space-y-6">
-                      
+
                       {/* Latest Samachar */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -545,127 +617,202 @@ function DashboardStyleHome() {
                             View All <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {SAMACHAR_ITEMS.map((item) => (
-                            <div key={item.id} onClick={() => setSelectedNews(item)} className="group bg-white rounded-2xl border border-[#EBE3DB]/60 overflow-hidden shadow-xs hover:shadow-md hover:border-[#F97316]/30 hover:-translate-y-1 transition-all duration-300 cursor-pointer">
-                              <div className="relative overflow-hidden h-24">
-                                <img src={item.img} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                              </div>
-                              <div className="p-3.5 space-y-1.5 text-left">
-                                <h4 className="text-xs font-bold leading-snug line-clamp-2 text-[#3E2723] group-hover:text-[#F97316] transition-colors duration-200">{item.title}</h4>
-                                <div className="flex items-center justify-between text-[10px] text-warm-muted pt-1 border-t border-[#FAF3EC]">
-                                  <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3 text-[#F97316]" />{item.location}</span>
-                                  <span>{item.time}</span>
+                        <div className="rounded-[24px] border border-[#EBE3DB] bg-white/90 shadow-sm p-3 overflow-hidden">
+                          <style>{`@keyframes samachar-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+                          <div
+                            className="flex w-max gap-4 will-change-transform"
+                            style={{
+                              animation: samacharPaused ? 'none' : 'samachar-scroll 22s linear infinite',
+                              animationPlayState: samacharPaused ? 'paused' : 'running',
+                              transform: 'translate3d(0,0,0)',
+                            }}
+                          >
+                            {[...newsFeed, ...newsFeed].map((item, idx) => (
+                              <article key={`${item.id}-${idx}`} onMouseEnter={() => setSamacharPaused(true)} onMouseLeave={() => setSamacharPaused(false)} onClick={() => setSelectedNews(item)} className="group w-64 bg-[#FFFDFB] rounded-2xl border border-[#EBE3DB]/80 overflow-hidden shadow-sm hover:shadow-md hover:border-[#F97316]/35 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                                <div className="relative overflow-hidden h-24">
+                                  <img src={getImageUrl(item.img)} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                 </div>
-                              </div>
-                            </div>
-                          ))}
+                                <div className="p-3.5 space-y-1.5 text-left">
+                                  <h4 className="text-xs font-bold leading-snug line-clamp-2 text-[#3E2723] group-hover:text-[#F97316] transition-colors duration-200">{item.title}</h4>
+                                  <div className="flex items-center justify-between text-[10px] text-warm-muted pt-1 border-t border-[#FAF3EC]">
+                                    <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3 text-[#F97316]" />{item.location}</span>
+                                    <span>{item.time}</span>
+                                  </div>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Three Column Grid for Matrimony + Jobs + Quick Access */}
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         {/* Matrimony Widget */}
-                        <div className="lg:col-span-6 bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left">
-                          <div className="flex items-center justify-between">
+                        <motion.div
+                          onHoverStart={() => setPartnerPaused(true)}
+                          onHoverEnd={() => setPartnerPaused(false)}
+                          className="lg:col-span-6 bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left"
+                        >
+                          <div className="flex items-center justify-between gap-3">
                             <div>
                               <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Find Your Life Partner</h3>
-                              <p className="text-[10px] text-[#8C6D58]">Trusted matrimony within your community</p>
+                              <p className="text-[10px] text-[#8C6D58]">Swipe-style profile spotlight with elegant motion</p>
                             </div>
                             <button onClick={() => handleNavClick("Matrimony")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5 cursor-pointer">
                               View Profiles <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-                            {PARTNERS.slice(0, 4).map((partner, i) => (
-                              <div key={i} className="bg-white hover:shadow-md border border-[#EBE3DB]/60 rounded-2xl overflow-hidden flex flex-col transition duration-200 text-left shadow-3xs">
-                                <img src={partner.photo} alt={partner.name} className="w-full h-24 object-cover" />
-                                <div className="p-2.5 space-y-1">
-                                  <h4 className="text-[11px] font-bold text-[#3E2723] truncate">
-                                    {partner.name}
-                                  </h4>
-                                  <p className="text-[9px] text-warm-muted font-medium truncate">{partner.age} yrs · {partner.location}</p>
-                                  <span className="inline-block text-[8px] bg-orange-50 text-[#F97316] border border-orange-100/50 font-bold px-1.5 py-0.5 rounded-full mt-0.5 truncate max-w-full">
-                                    {partner.profession}
-                                  </span>
+
+                          <div className="grid gap-4 md:grid-cols-[1.02fr_0.98fr]">
+                            <AnimatePresence mode="wait">
+                              <motion.article
+                                key={partnerIndex}
+                                initial={{ opacity: 0, x: 24, rotate: 2 }}
+                                animate={{ opacity: 1, x: 0, rotate: 0 }}
+                                exit={{ opacity: 0, x: -24, rotate: -2 }}
+                                transition={{ duration: 0.35, ease: "easeOut" }}
+                                className="relative overflow-hidden rounded-[24px] border border-[#F1E7DE] bg-gradient-to-br from-[#FFF9F5] via-white to-[#FFF5EE] p-4 shadow-sm"
+                              >
+                                <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-r from-[#FFF7ED] via-transparent to-[#FFE9D6]" />
+                                <div className="relative flex items-start gap-4">
+                                  <motion.img
+                                    src={PARTNERS[partnerIndex].photo}
+                                    alt={PARTNERS[partnerIndex].name}
+                                    className="h-24 w-24 rounded-3xl object-cover border border-white shadow-md"
+                                    animate={{ y: [0, -3, 0] }}
+                                    transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                                  />
+                                  <div className="space-y-2 text-left">
+                                    <p className="text-[10px] uppercase tracking-[0.35em] text-[#F97316]">Featured Match</p>
+                                    <h4 className="text-base font-black text-[#3E2723]">{PARTNERS[partnerIndex].name}</h4>
+                                    <p className="text-[11px] text-[#7A6458]">{PARTNERS[partnerIndex].age} yrs · {PARTNERS[partnerIndex].location}</p>
+                                    <span className="inline-flex rounded-full bg-[#FFF1E7] px-2.5 py-1 text-[10px] font-bold text-[#F97316]">{PARTNERS[partnerIndex].profession}</span>
+                                    <p className="text-[10px] text-[#8C6D58]">Education: {PARTNERS[partnerIndex].education}</p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                                <div className="mt-4 flex items-center justify-between gap-2 text-[10px] text-[#8C6D58]">
+                                  <span>Auto-swoops every 3.2s · hover to pause</span>
+                                  <button
+                                    onClick={() => setPartnerIndex((prev) => (prev + 1) % PARTNERS.length)}
+                                    className="rounded-full bg-[#F97316] px-3 py-1.5 font-bold text-white shadow-sm hover:bg-[#EA580C] transition"
+                                  >
+                                    Next Match
+                                  </button>
+                                </div>
+                              </motion.article>
+                            </AnimatePresence>
+
+                            <div className="space-y-3">
+                              {PARTNERS.map((partner, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => setPartnerIndex(i)}
+                                  className={"flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition " + (partnerIndex === i ? "border-[#F97316] bg-[#FFF8F3] shadow-sm" : "border-[#EFE5DD] bg-white hover:border-[#F5D7C0]")}
+                                >
+                                  <img src={partner.photo} alt={partner.name} className="h-12 w-12 rounded-2xl object-cover" />
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-[#3E2723] truncate">{partner.name}</p>
+                                    <p className="text-[10px] text-[#8C6D58] truncate">{partner.profession} · {partner.location}</p>
+                                  </div>
+                                  {partnerIndex === i && <Sparkles className="ml-auto h-4 w-4 text-[#F97316]" />}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex gap-1.5">
+                              {PARTNERS.map((partner, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => setPartnerIndex(i)}
+                                  className={"h-2 rounded-full transition-all " + (partnerIndex === i ? "w-6 bg-[#F97316]" : "w-2.5 bg-[#EBE3DB]")}
+                                  aria-label={`Open partner ${i + 1}`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-[10px] text-warm-muted">Profile {partnerIndex + 1} / {PARTNERS.length}</span>
+                          </div>
+                        </motion.div>
 
                         {/* Jobs Widget */}
-                        <div className="lg:col-span-3 bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left flex flex-col justify-between">
-                          <div className="space-y-3">
+                        <motion.div
+                          onMouseEnter={() => setJobsPaused(true)}
+                          onMouseLeave={() => setJobsPaused(false)}
+                          className="lg:col-span-3 bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left flex flex-col justify-between"
+                        >
+                          <div className="flex-1 flex flex-col min-h-0 space-y-3 pb-1">
                             <div className="flex items-center justify-between">
                               <div>
                                 <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Jobs for You</h3>
-                                <p className="text-[10px] text-[#8C6D58]">Relevant openings</p>
+                                <p className="text-[10px] text-[#8C6D58]">Vertical auto-scroll ticker · pauses on hover</p>
                               </div>
                               <button onClick={() => handleNavClick("Jobs")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5 cursor-pointer">
                                 View All <ArrowRight className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                            <div className="space-y-2">
-                              {DASHBOARD_JOBS.slice(0, 3).map((job, idx) => (
-                                <div key={idx} className="group flex items-center justify-between p-2.5 rounded-xl border border-[#F3E8DE]/60 bg-[#FFF8F2]/60 hover:bg-[#FDF2E9] hover:border-orange-200 transition-all duration-200">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <div className="w-7 h-7 rounded-xl bg-[#F0E6FF] text-[#8B5CF6] font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-                                      {job.logo ?? "J"}
+                            <style>{`@keyframes jobs-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }`}</style>
+                            <div className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-[#F3E8DE]/70 bg-[#FFF8F2]/70 p-1.5">
+                              <div
+                                className="space-y-2 will-change-transform"
+                                style={{
+                                  animation: jobsPaused ? 'none' : 'jobs-scroll 18s linear infinite',
+                                  animationPlayState: jobsPaused ? 'paused' : 'running',
+                                }}
+                              >
+                                {visibleJobs.map((job, idx) => (
+                                  <div key={`${(job as any).role ?? (job as any).title ?? 'job'}-${idx}`} className="group flex items-center justify-between p-2.5 rounded-xl border border-[#F3E8DE]/60 bg-white hover:bg-[#FDF2E9] hover:border-orange-200 transition-all duration-200">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="w-7 h-7 rounded-xl bg-[#F0E6FF] text-[#8B5CF6] font-bold flex items-center justify-center text-[10px] flex-shrink-0">
+                                        {(job as any).logo ?? (job as any).company?.charAt(0)?.toUpperCase() ?? "J"}
+                                      </div>
+                                      <div className="text-left leading-tight min-w-0">
+                                        <h4 className="text-[11px] font-bold text-[#3E2723] truncate flex items-center gap-1">
+                                          {(job as any).role ?? (job as any).title ?? "Opportunity"}
+                                          {(job as any).isNew && (
+                                            <span className="bg-emerald-100 text-emerald-700 text-[7px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">New</span>
+                                          )}
+                                        </h4>
+                                        <p className="text-[9px] text-warm-muted truncate">{(job as any).company ?? (job as any).employer ?? "Community"} · {(job as any).location ?? ""}</p>
+                                      </div>
                                     </div>
-                                    <div className="text-left leading-tight min-w-0">
-                                      <h4 className="text-[11px] font-bold text-[#3E2723] truncate flex items-center gap-1">
-                                        {job.role}
-                                        {job.isNew && (
-                                          <span className="bg-emerald-100 text-emerald-700 text-[7px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">New</span>
-                                        )}
-                                      </h4>
-                                      <p className="text-[9px] text-warm-muted truncate">{job.company} · {job.location}</p>
-                                    </div>
+                                    <ArrowRight className="w-3.5 h-3.5 text-[#8C6D58] group-hover:text-[#F97316] transition-colors flex-shrink-0" />
                                   </div>
-                                  <ArrowRight className="w-3.5 h-3.5 text-[#8C6D58] group-hover:text-[#F97316] transition-colors flex-shrink-0" />
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
                           </div>
-                          <button onClick={() => setShowPostJob(true)} className="w-full py-2 rounded-xl border border-dashed border-[#F97316] text-[#F97316] text-xs font-bold hover:bg-orange-50/50 transition flex items-center justify-center gap-1 mt-2.5 cursor-pointer">
+                          <button onClick={() => setShowPostJob(true)} className="w-full py-2 rounded-xl border border-dashed border-[#F97316] text-[#F97316] text-xs font-bold hover:bg-orange-50/50 transition flex items-center justify-center gap-1 mt-1 cursor-pointer">
                             <Plus className="w-3.5 h-3.5" /> Post a Job
                           </button>
-                        </div>
+                        </motion.div>
 
                         {/* Quick Access Widget */}
-                        <div className="lg:col-span-3 bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left flex flex-col justify-between">
-                          <div className="space-y-4">
+                        <div className="lg:col-span-3 bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 shadow-xs text-left flex flex-col">
+                          <div className="flex-1 flex flex-col min-h-0 space-y-4">
                             <div className="flex items-center justify-between">
                               <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Quick Access</h3>
                               <button onClick={() => handleNavClick("Samachar")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5 cursor-pointer">
                                 View All →
                               </button>
                             </div>
-                            <div className="grid grid-cols-4 gap-3">
-                              {[
-                                { label: "Samachar", icon: Newspaper, color: "bg-[#FFF5EE] text-[#F97316] hover:bg-[#FDF2E9]" },
-                                { label: "Matrimony", icon: Heart, color: "bg-red-50 text-red-500 hover:bg-red-100/50" },
-                                { label: "Jobs", icon: Briefcase, color: "bg-amber-50 text-amber-600 hover:bg-amber-100/50" },
-                                { label: "Events", icon: Calendar, color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/50" },
-                                { label: "Directory", icon: Users, color: "bg-blue-50 text-blue-600 hover:bg-blue-100/50" },
-                                { label: "Gallery", icon: ImageIcon, color: "bg-purple-50 text-purple-600 hover:bg-purple-100/50" },
-                                { label: "Videos", icon: Video, color: "bg-pink-50 text-pink-500 hover:bg-pink-100/50" },
-                                { label: "Donations", icon: HandHeart, color: "bg-[#FDF2E9] text-[#F97316] hover:bg-[#FBE9DC]" }
-                              ].map((item, i) => (
-                                <button 
-                                  key={i} 
-                                  onClick={() => handleNavClick(item.label)} 
-                                  className="flex flex-col items-center gap-1.5 group transition duration-200 cursor-pointer"
-                                >
-                                  <div className={`w-10 h-10 rounded-full ${item.color} flex items-center justify-center shadow-2xs group-hover:-translate-y-0.5 group-hover:shadow-xs transition duration-200`}>
-                                    <item.icon className="w-4.5 h-4.5" />
-                                  </div>
-                                  <span className="text-[9px] font-bold text-[#8C6D58] group-hover:text-[#F97316] text-center truncate w-full transition duration-150">
-                                    {item.label}
-                                  </span>
-                                </button>
-                              ))}
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-3 flex-1 py-1">
+                              {quickAccessItems.map((item, i) => {
+                                const Icon = item.icon;
+                                return (
+                                  <button
+                                    key={i}
+                                    onClick={() => handleNavClick(item.label)}
+                                    className="flex flex-col items-center justify-center gap-1.5 group transition duration-200 cursor-pointer"
+                                  >
+                                    <div className={`w-10 h-10 rounded-full ${item.color} flex items-center justify-center shadow-2xs group-hover:-translate-y-0.5 group-hover:shadow-xs transition duration-200`}>
+                                      <Icon className="w-4.5 h-4.5" />
+                                    </div>
+                                    <span className="text-[9px] font-bold text-[#8C6D58] group-hover:text-[#F97316] text-center truncate w-full transition duration-150">
+                                      {item.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
                         </div>
@@ -674,82 +821,144 @@ function DashboardStyleHome() {
 
                     {/* Right column: Spans 3 of 12 columns (Upcoming Events & Today's Highlights) */}
                     <div className="xl:col-span-3 space-y-6">
-                      
+
                       {/* Upcoming Events */}
                       <div className="bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Upcoming Events</h3>
-                          <button onClick={() => handleNavClick("Events")} className="text-xs font-bold text-[#F97316] hover:underline">
-                            View All →
-                          </button>
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Upcoming Events</h3>
+                            <p className="text-[10px] text-[#8C6D58]">Snap-scroll with ← → arrow controls</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => eventTrackRef.current?.scrollBy({ left: -320, behavior: "smooth" })} className="h-8 w-8 rounded-full border border-[#EBE3DB] bg-white hover:bg-[#FFF5EE] flex items-center justify-center text-[#F97316] transition"><ChevronLeft className="w-4 h-4" /></button>
+                            <button onClick={() => eventTrackRef.current?.scrollBy({ left: 320, behavior: "smooth" })} className="h-8 w-8 rounded-full border border-[#EBE3DB] bg-white hover:bg-[#FFF5EE] flex items-center justify-center text-[#F97316] transition"><ChevronRight className="w-4 h-4" /></button>
+                          </div>
                         </div>
 
-                        <div className="space-y-3.5">
+                        <div ref={eventTrackRef} className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2">
                           {EVENTS_ITEMS.map((ev, i) => (
-                            <div key={i} className="flex items-center gap-3 group cursor-pointer" onClick={() => handleNavClick("Events")}>
-                              {/* Date Block */}
-                              <div className="w-10 h-10 rounded-xl bg-[#FFF5EE] border border-[#F3E8DE] flex flex-col items-center justify-center flex-shrink-0 group-hover:border-[#F97316]/30 group-hover:bg-[#FDF2E9] transition duration-200">
-                                <span className="text-xs font-extrabold text-[#F97316] leading-none">{ev.day}</span>
-                                <span className="text-[8px] font-bold text-warm-muted leading-none mt-0.5">{ev.month}</span>
+                            <motion.article key={i} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.25, delay: i * 0.04 }} className="min-w-[260px] snap-start rounded-2xl border border-[#F3E8DE] bg-[#FFFDFB] p-3 shadow-sm hover:shadow-md transition">
+                              <div className="flex items-center gap-3 group cursor-pointer" onClick={() => handleNavClick("Events")}>
+                                <div className="w-10 h-10 rounded-xl bg-[#FFF5EE] border border-[#F3E8DE] flex flex-col items-center justify-center flex-shrink-0 group-hover:border-[#F97316]/30 group-hover:bg-[#FDF2E9] transition duration-200">
+                                  <span className="text-xs font-extrabold text-[#F97316] leading-none">{ev.day}</span>
+                                  <span className="text-[8px] font-bold text-warm-muted leading-none mt-0.5">{ev.month}</span>
+                                </div>
+                                <div className="text-xs leading-snug text-left">
+                                  <h4 className="font-bold text-[#3E2723] line-clamp-1 group-hover:text-[#F97316] transition duration-200">{ev.title}</h4>
+                                  <p className="text-[9px] text-warm-muted flex items-center gap-0.5 mt-0.5"><MapPin className="w-2.5 h-2.5 text-[#F97316]" /> {ev.location} · {ev.time}</p>
+                                </div>
                               </div>
-
-                              <div className="text-xs leading-snug">
-                                <h4 className="font-bold text-[#3E2723] line-clamp-1 group-hover:text-[#F97316] transition duration-200">{ev.title}</h4>
-                                <p className="text-[9px] text-warm-muted flex items-center gap-0.5 mt-0.5">
-                                  <MapPin className="w-2.5 h-2.5 text-[#F97316]" /> {ev.location} · {ev.time}
-                                </p>
-                              </div>
-                            </div>
+                            </motion.article>
                           ))}
                         </div>
                       </div>
 
                       {/* Today's Highlights Timeline */}
                       <div className="bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left relative overflow-hidden">
-                        <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Today's Highlights</h3>
-                        
-                        <div className="relative space-y-4 pl-1">
-                          {/* Timeline vertical connector */}
-                          <div className="absolute left-[13px] top-3 bottom-3 w-[1.5px] bg-[#EBE3DB]/60 border-dashed border-l border-[#EBE3DB]/70" />
-
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Today's Highlights</h3>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-600"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Live</span>
+                        </div>
+                        <div className="rounded-2xl border border-[#F3E8DE] bg-gradient-to-br from-[#FFF9F5] via-white to-[#FFF4EA] p-3 min-h-[115px] overflow-hidden relative">
+                          <AnimatePresence mode="wait">
+                            <motion.div
+                              key={activeHighlight.type + activeHighlight.name}
+                              initial={{ x: 40, opacity: 0 }}
+                              animate={{ x: 0, opacity: 1 }}
+                              exit={{ x: -30, opacity: 0 }}
+                              transition={{ duration: 0.35, ease: "easeOut" }}
+                              className="absolute inset-3 rounded-2xl border border-white/80 bg-white/95 p-3 shadow-sm"
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-9 h-9 rounded-xl ${activeHighlight.color} flex items-center justify-center border border-[#F3E8DE]/40`}>
+                                  <activeHighlight.icon className="w-4 h-4" />
+                                </div>
+                                <div className="text-left">
+                                  <p className="text-[10px] uppercase tracking-[0.3em] text-[#F97316]">Highlight</p>
+                                  <h4 className="text-sm font-bold text-[#3E2723] mt-0.5">{activeHighlight.name}</h4>
+                                  <p className="text-[10px] text-[#8C6D58] mt-1">{activeHighlight.type} · {activeHighlight.detail}</p>
+                                </div>
+                              </div>
+                              <div className="mt-2.5 flex items-center gap-2 text-[10px] text-emerald-600 font-semibold"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Updated now</div>
+                            </motion.div>
+                          </AnimatePresence>
+                        </div>
+                        <div className="flex gap-2">
                           {HIGHLIGHTS.map((item, i) => (
-                            <div key={i} className="flex gap-3.5 items-start relative z-10">
-                              <div className={`w-7 h-7 rounded-full ${item.color} flex items-center justify-center flex-shrink-0 shadow-2xs border border-[#F3E8DE]/40`}>
-                                <item.icon className="w-3.5 h-3.5" />
-                              </div>
-                              <div className="text-[10px] leading-tight text-left pt-0.5">
-                                <p className="text-warm-muted font-medium">{item.type}</p>
-                                <p className="font-bold text-[#3E2723] mt-0.5">
-                                  {item.name} <span className="font-normal text-warm-muted text-[9px]">{item.detail}</span>
-                                </p>
-                              </div>
-                            </div>
+                            <button key={i} onClick={() => setHighlightIndex(i)} className={"h-2 rounded-full transition-all " + (highlightIndex === i ? "w-6 bg-[#F97316]" : "w-2.5 bg-[#EBE3DB]")} aria-label={`Show highlight ${i + 1}`} />
                           ))}
                         </div>
                       </div>
 
-                    </div>
-                  </div>
-
-                  {/* Photo Gallery */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Photo Gallery</h3>
-                      <button onClick={() => handleNavClick("Gallery")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5">
-                        View All <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {GALLERY_IMAGES.map((img, i) => (
-                        <div key={i} onClick={() => setSelectedPhoto(img)} className="group relative rounded-2xl overflow-hidden border border-[#EBE3DB]/60 aspect-video shadow-xs hover:shadow-md cursor-pointer transition">
-                          <img src={img} alt="gallery" className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition duration-300 flex items-center justify-center">
-                            <span className="text-white text-xs font-bold bg-white/20 backdrop-blur-xs border border-white/20 px-3.5 py-1.5 rounded-full flex items-center gap-1">
-                              <ImageIcon className="w-3.5 h-3.5" /> View Photo
-                            </span>
+                      {/* Photo Gallery */}
+                      <motion.div
+                        onHoverStart={() => setGalleryPaused(true)}
+                        onHoverEnd={() => setGalleryPaused(false)}
+                        className="bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Photo Gallery</h3>
+                            <p className="text-[10px] text-[#8C6D58]">One featured image at a time, hover-paused and swipe-ready</p>
+                          </div>
+                          <button onClick={() => handleNavClick("Gallery")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5">
+                            View All <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div
+                          onTouchStart={handleTouchStart}
+                          onTouchEnd={handleTouchEnd}
+                          className="rounded-2xl border border-[#EBE3DB]/70 bg-gradient-to-br from-[#FFF9F5] via-white to-[#FFF4EA] p-3"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPhoto(activeGallery)}
+                            className="relative h-[115px] w-full overflow-hidden rounded-[20px] border border-white/80 bg-white shadow-sm text-left"
+                            aria-label="Open featured gallery image"
+                          >
+                            {galleryLoading && (
+                              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[20px] bg-white/75 backdrop-blur-sm">
+                                <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-[#F97316] shadow-sm border border-[#EBE3DB]">
+                                  <Loader className="w-3.5 h-3.5 animate-spin" /> Loading image…
+                                </span>
+                              </div>
+                            )}
+                            <AnimatePresence mode="wait">
+                              <motion.img
+                                key={activeGallery}
+                                src={activeGallery}
+                                alt="Featured gallery"
+                                onLoad={() => setGalleryLoading(false)}
+                                initial={{ opacity: 0, scale: 1.04, y: 8 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.98, y: -8 }}
+                                transition={{ duration: 0.35, ease: "easeOut" }}
+                                className="h-full w-full object-cover"
+                              />
+                            </AnimatePresence>
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent p-4 text-white">
+                              <p className="text-[10px] uppercase tracking-[0.25em] text-white/80">Featured photo</p>
+                              <p className="text-sm font-semibold mt-1">Community memory #{galleryIndex + 1}</p>
+                              <p className="text-[11px] text-white/80 mt-1">Tap to open the full-screen image view.</p>
+                            </div>
+                          </button>
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              {GALLERY_IMAGES.map((_, index) => (
+                                <button
+                                  key={index}
+                                  type="button"
+                                  onClick={() => setGalleryIndex(index)}
+                                  className={"h-2 rounded-full transition-all " + (galleryIndex === index ? "w-6 bg-[#F97316]" : "w-2.5 bg-[#EBE3DB]")}
+                                  aria-label={`Show gallery image ${index + 1}`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-[10px] text-[#8C6D58]">{galleryPaused ? "Paused on hover" : "Auto-rotating"}</span>
                           </div>
                         </div>
-                      ))}
+                      </motion.div>
+
                     </div>
                   </div>
 
@@ -761,25 +970,30 @@ function DashboardStyleHome() {
                         View All <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {POPULAR_VIDEOS.map((vid, i) => (
-                        <div key={i} onClick={() => setSelectedVideo(vid)} className="group bg-white rounded-2xl border border-[#EBE3DB]/60 overflow-hidden shadow-xs hover:shadow-md cursor-pointer transition">
-                          <div className="relative aspect-video overflow-hidden">
-                            <img src={vid.img} alt={vid.title} className="w-full h-full object-cover group-hover:scale-103 transition duration-500" />
-                            <div className="absolute inset-0 bg-black/10 group-hover:bg-black/25 flex items-center justify-center transition duration-300">
-                              <div className="w-11 h-11 rounded-full bg-white/95 shadow-md flex items-center justify-center text-[#F97316] transform group-hover:scale-108 transition duration-300">
-                                <Play className="w-4.5 h-4.5 fill-current ml-0.5" />
-                              </div>
-                            </div>
-                            <span className="absolute bottom-2.5 right-2.5 bg-black/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                              {vid.duration}
-                            </span>
-                          </div>
-                          <div className="p-3 text-left">
-                            <h4 className="text-xs font-bold text-[#3E2723] group-hover:text-[#F97316] transition-colors">{vid.title}</h4>
-                          </div>
+                    <div className="grid grid-cols-1 md:grid-cols-[1.05fr_0.95fr] gap-4">
+                      <motion.div key={activeVideo.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-[24px] border border-[#EBE3DB]/70 bg-[#FFFDFB] p-3 shadow-sm overflow-hidden relative">
+                        <img src={activeVideo.img} alt={activeVideo.title} className="h-56 w-full rounded-[18px] object-cover" />
+                        <div className="absolute inset-x-5 bottom-5 rounded-[18px] bg-black/65 p-4 text-white backdrop-blur-sm">
+                          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.25em] text-white/80"><span>Spotlight</span><span>{activeVideo.duration}</span></div>
+                          <h4 className="text-sm font-bold mt-1">{activeVideo.title}</h4>
+                          <motion.div className="mt-3 h-1.5 rounded-full bg-white/20 overflow-hidden">
+                            <motion.div key={videoIndex} className="h-full rounded-full bg-[#FBBF24]" initial={{ width: 0 }} animate={{ width: "100%" }} transition={{ duration: 5, ease: "linear" }} />
+                          </motion.div>
                         </div>
-                      ))}
+                      </motion.div>
+                      <div className="space-y-3">
+                        {POPULAR_VIDEOS.map((vid, i) => (
+                          <button key={i} onClick={() => setVideoIndex(i)} className={"w-full rounded-2xl border p-3 text-left flex gap-3 transition " + (i === videoIndex ? "border-[#F97316] bg-[#FFF8F3] shadow-sm" : "border-[#EBE3DB] bg-white hover:bg-[#FFF8F3]")}>
+                            <img src={vid.img} alt={vid.title} className="h-16 w-24 rounded-xl object-cover" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[10px] uppercase tracking-[0.25em] text-[#F97316]">Video {i + 1}</div>
+                              <div className="text-xs font-bold text-[#3E2723] mt-0.5 line-clamp-2">{vid.title}</div>
+                              <div className="text-[10px] text-[#8C6D58] mt-1">{vid.duration}</div>
+                            </div>
+                            <Play className="w-4 h-4 text-[#F97316] mt-1" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -795,7 +1009,7 @@ function DashboardStyleHome() {
                   <div className="grid md:grid-cols-2 gap-6">
                     {(news.length > 0 ? news : NEWS).map((item: any) => (
                       <div key={item.id} onClick={() => setSelectedNews(item)} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden flex flex-col md:flex-row hover:shadow-md transition cursor-pointer">
-                        <img src={item.img} alt="" className="w-full md:w-44 h-32 object-cover" />
+                        <img src={getImageUrl(item.img || item.img_url)} alt="" className="w-full md:w-44 h-32 object-cover" />
                         <div className="p-4 flex-1 flex flex-col justify-between">
                           <div>
                             <span className="text-[9px] font-bold uppercase tracking-wider text-[#F97316] bg-[#FFF5EE] px-2.5 py-0.5 rounded-full">{item.category}</span>
@@ -838,18 +1052,17 @@ function DashboardStyleHome() {
                           </div>
                           <div className="flex items-center justify-between border-t border-[#F3E8DE] mt-4 pt-3">
                             <span className="text-xs font-semibold">{c.member_count} Members</span>
-                            <button 
+                            <button
                               onClick={() => {
                                 const copy = [...communityList];
                                 copy[i].joined = !copy[i].joined;
                                 copy[i].member_count = copy[i].joined ? copy[i].member_count + 1 : copy[i].member_count - 1;
                                 setCommunityList(copy);
                               }}
-                              className={`text-xs px-3.5 py-1.5 rounded-full font-semibold transition ${
-                                c.joined 
-                                  ? "bg-emerald-100 text-emerald-700 flex items-center gap-1" 
+                              className={`text-xs px-3.5 py-1.5 rounded-full font-semibold transition ${c.joined
+                                  ? "bg-emerald-100 text-emerald-700 flex items-center gap-1"
                                   : "bg-[#F97316] text-white hover:bg-[#EA580C]"
-                              }`}
+                                }`}
                             >
                               {c.joined ? <><Check className="w-3.5 h-3.5" /> Joined</> : "Join"}
                             </button>
@@ -872,7 +1085,7 @@ function DashboardStyleHome() {
                     {matrimonyList.map((m, i) => (
                       <div key={i} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between hover:shadow-md transition">
                         <div className="aspect-[4/5] relative">
-                          <img src={m.photo} alt={m.name} className="w-full h-full object-cover" />
+                          <img src={m.photo || m.photo_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&fit=crop"} alt={m.name} className="w-full h-full object-cover" />
                           <div className="absolute top-2 left-2 bg-white/95 px-2 py-0.5 rounded-full text-[10px] font-bold text-[#F97316]">
                             {m.match}% Match
                           </div>
@@ -886,17 +1099,26 @@ function DashboardStyleHome() {
                             </p>
                           </div>
                           <div className="mt-3">
-                            <button 
-                              onClick={() => {
-                                const copy = [...matrimonyList];
-                                copy[i].interested = !copy[i].interested;
-                                setMatrimonyList(copy);
+                            <button
+                              onClick={async () => {
+                                try {
+                                  if (!m.interested) {
+                                    await api.showInterest(m.id);
+                                    toast.success(`Interest sent to ${m.name}!`);
+                                  } else {
+                                    toast.info("Interest already expressed.");
+                                  }
+                                  const copy = [...matrimonyList];
+                                  copy[i].interested = true;
+                                  setMatrimonyList(copy);
+                                } catch (e: any) {
+                                  toast.error(e.message || "Failed to express interest. Make sure your matrimony profile is set up.");
+                                }
                               }}
-                              className={`w-full py-2 rounded-lg text-xs font-semibold transition ${
-                                m.interested 
-                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200" 
+                              className={`w-full py-2 rounded-lg text-xs font-semibold transition ${m.interested
+                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
                                   : "border border-[#F97316] text-[#F97316] hover:bg-[#FFF5EE]"
-                              }`}
+                                }`}
                             >
                               {m.interested ? "Interest Sent ✓" : "Express Interest"}
                             </button>
@@ -935,17 +1157,16 @@ function DashboardStyleHome() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3 w-full md:w-auto">
-                          <button 
+                          <button
                             onClick={() => {
                               const copy = [...jobList];
                               copy[i].applied = !copy[i].applied;
                               setJobList(copy);
                             }}
-                            className={`flex-1 md:flex-none text-xs px-5 py-2 rounded-xl font-semibold transition ${
-                              job.applied 
-                                ? "bg-emerald-100 text-emerald-700" 
+                            className={`flex-1 md:flex-none text-xs px-5 py-2 rounded-xl font-semibold transition ${job.applied
+                                ? "bg-emerald-100 text-emerald-700"
                                 : "bg-[#F97316] text-white hover:bg-[#EA580C]"
-                            }`}
+                              }`}
                           >
                             {job.applied ? "Applied" : "Apply Now"}
                           </button>
@@ -966,7 +1187,7 @@ function DashboardStyleHome() {
                   <div className="grid md:grid-cols-3 gap-5">
                     {eventList.slice(0, 6).map((ev: any, i) => (
                       <div key={i} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between hover:shadow-md transition">
-                        <img src={ev.img ?? "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=200&fit=crop"} alt="" className="w-full h-40 object-cover" />
+                        <img src={ev.img ? getImageUrl(ev.img) : "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=200&fit=crop"} alt="" className="w-full h-40 object-cover" />
                         <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                           <div>
                             <div className="text-[10px] text-[#F97316] font-bold">{ev.date} · {ev.venue}</div>
@@ -975,7 +1196,7 @@ function DashboardStyleHome() {
                           </div>
                           <div className="flex items-center justify-between border-t border-[#F3E8DE] pt-3">
                             <span className="text-[10px] text-warm-muted">{ev.attendees} Attending</span>
-                            <button 
+                            <button
                               onClick={() => {
                                 if (ev.registered) {
                                   const copy = [...eventList];
@@ -993,11 +1214,10 @@ function DashboardStyleHome() {
                                   });
                                 }
                               }}
-                              className={`text-xs px-3.5 py-1.5 rounded-full font-semibold transition cursor-pointer ${
-                                ev.registered 
-                                  ? "bg-emerald-100 text-emerald-700" 
+                              className={`text-xs px-3.5 py-1.5 rounded-full font-semibold transition cursor-pointer ${ev.registered
+                                  ? "bg-emerald-100 text-emerald-700"
                                   : "bg-[#F97316] text-white hover:bg-[#EA580C]"
-                              }`}
+                                }`}
                             >
                               {ev.registered ? "Registered ✓" : "Register Now"}
                             </button>
@@ -1028,16 +1248,16 @@ function DashboardStyleHome() {
                             <MapPin className="w-3 h-3" /> {m.location}
                           </p>
                         </div>
-                        <button 
+                        <button
                           onClick={() => {
                             const lastName = m.name.split(" ").pop();
                             const matched = families.find((f: any) => f.head.includes(lastName));
-                            
+
                             if (matched && matched.members) {
                               const spouse = matched.members.find((mb: any) => mb.relation === "Spouse") || { name: "Spouse", occupation: "Homemaker" };
                               const son = matched.members.find((mb: any) => mb.relation === "Son") || { name: "Son", occupation: "Student" };
                               const daughter = matched.members.find((mb: any) => mb.relation === "Daughter") || { name: "Daughter", occupation: "Student" };
-                              
+
                               setSelectedFamilyTree({
                                 name: m.name,
                                 profession: m.profession,
@@ -1079,9 +1299,15 @@ function DashboardStyleHome() {
                     <span className="text-xs text-warm-muted">Support and grow community-owned businesses</span>
                   </div>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                    {BUSINESSES.map((b) => (
+                    {(businesses.length > 0 ? businesses : BUSINESSES).map((b) => (
                       <div key={b.id} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden flex flex-col justify-between hover:shadow-md transition shadow-sm">
-                        <img src={b.img} alt={b.name} className="w-full h-32 object-cover" />
+                        {b.img || b.img_url ? (
+                          <img src={getImageUrl(b.img || b.img_url)} alt={b.name} className="w-full h-32 object-cover" />
+                        ) : (
+                          <div className="w-full h-32 bg-primary text-white flex items-center justify-center font-bold text-lg">
+                            {b.name?.[0] || "B"}
+                          </div>
+                        )}
                         <div className="p-4 flex-1 flex flex-col justify-between">
                           <div>
                             <div className="text-[8px] uppercase tracking-wider text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full w-max">
@@ -1111,19 +1337,17 @@ function DashboardStyleHome() {
                     </div>
                     {/* Tabs switcher */}
                     <div className="flex bg-[#FAF3EC] border border-[#EBE3DB] rounded-xl p-1 gap-1">
-                      <button 
+                      <button
                         onClick={() => setDonationTab("campaigns")}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                          donationTab === "campaigns" ? "bg-white text-[#F97316] shadow-2xs font-bold" : "text-[#5C4033] hover:text-[#3E2723]"
-                        }`}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${donationTab === "campaigns" ? "bg-white text-[#F97316] shadow-2xs font-bold" : "text-[#5C4033] hover:text-[#3E2723]"
+                          }`}
                       >
                         Active Campaigns
                       </button>
-                      <button 
+                      <button
                         onClick={() => setDonationTab("history")}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                          donationTab === "history" ? "bg-white text-[#F97316] shadow-2xs font-bold" : "text-[#5C4033] hover:text-[#3E2723]"
-                        }`}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${donationTab === "history" ? "bg-white text-[#F97316] shadow-2xs font-bold" : "text-[#5C4033] hover:text-[#3E2723]"
+                          }`}
                       >
                         Donation History
                       </button>
@@ -1141,7 +1365,7 @@ function DashboardStyleHome() {
                             <div>
                               <h3 className="font-bold text-base text-[#3E2723]">{item.title}</h3>
                               <p className="text-xs text-warm-muted mt-1">{item.desc}</p>
-                              
+
                               {/* Progress bar */}
                               <div className="space-y-1.5 mt-4">
                                 <div className="flex justify-between text-xs font-bold">
@@ -1158,19 +1382,19 @@ function DashboardStyleHome() {
                             <div className="border-t border-[#F3E8DE] pt-4 flex gap-3 items-center">
                               <div className="relative flex-1">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#8C6D58]">₹</span>
-                                <input 
-                                  type="number" 
-                                  placeholder="Enter amount" 
+                                <input
+                                  type="number"
+                                  placeholder="Enter amount"
                                   value={donateAmount[item.id] || ""}
                                   onChange={(e) => setDonateAmount({ ...donateAmount, [item.id]: e.target.value })}
                                   className="w-full pl-6 pr-3 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316]"
                                 />
                               </div>
-                              <button 
+                              <button
                                 onClick={async () => {
                                   const amount = donateAmount[item.id];
                                   if (!amount || Number(amount) <= 0) return;
-                                  
+
                                   const payload = {
                                     donor: userProfile.name,
                                     amount: parseInt(amount),
@@ -1189,7 +1413,7 @@ function DashboardStyleHome() {
                                       return c;
                                     });
                                     setCampaignList(updated);
-                                    
+
                                     setUserDonations([
                                       {
                                         ...res,
@@ -1249,7 +1473,7 @@ function DashboardStyleHome() {
                                   </span>
                                 </td>
                                 <td className="p-3">
-                                  <button 
+                                  <button
                                     onClick={() => downloadReceiptPdf({
                                       campaign: d.campaign_title || `Campaign #${d.campaign}`,
                                       amount: d.amount,
@@ -1346,7 +1570,7 @@ function DashboardStyleHome() {
                             <p className="text-[10px] text-warm-muted">{doc.type} · {doc.size}</p>
                           </div>
                         </div>
-                        <button 
+                        <button
                           onClick={() => alert(`Downloading ${doc.title}...`)}
                           className="w-9 h-9 rounded-xl bg-[#FAF3EC] hover:bg-[#FDF2E9] hover:text-[#F97316] flex items-center justify-center text-[#5C4033] transition"
                         >
@@ -1365,7 +1589,7 @@ function DashboardStyleHome() {
                     <h2 className="text-2xl font-bold text-[#3E2723]">My Samaj Family Network</h2>
                     <span className="text-xs text-warm-muted">Visual family connections hierarchy</span>
                   </div>
-                  
+
                   <div className="bg-white border border-[#EBE3DB] rounded-2xl p-6 shadow-sm flex flex-col items-center">
                     {/* Interactive family tree layout */}
                     <div className="space-y-8 w-full max-w-lg">
@@ -1377,7 +1601,7 @@ function DashboardStyleHome() {
                         </div>
                       </div>
                       <div className="w-0.5 h-6 bg-[#EBE3DB] mx-auto"></div>
-                      
+
                       {/* Father */}
                       <div className="flex justify-center">
                         <div className="bg-[#FFF5EE] border-2 border-[#EBE3DB] p-3 rounded-xl text-center w-40">
@@ -1420,13 +1644,13 @@ function DashboardStyleHome() {
               {activeNav === "Settings" && (
                 <motion.div key="settings" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <h2 className="text-2xl font-bold text-[#3E2723]">Profile & Settings</h2>
-                  
+
                   <div className="bg-white border border-[#EBE3DB] rounded-[20px] p-6 shadow-sm max-w-2xl">
                     <form onSubmit={(e) => {
                       e.preventDefault();
                       alert("Profile updated successfully!");
                     }} className="space-y-4">
-                      
+
                       <div className="flex flex-col sm:flex-row gap-4 items-center pb-4 border-b border-[#F3E8DE]">
                         <img src={userProfile.avatar} alt="Profile" className="w-16 h-16 rounded-full object-cover border-2 border-[#F97316]" />
                         <div>
@@ -1441,9 +1665,9 @@ function DashboardStyleHome() {
                           <label className="text-xs font-bold text-[#5C4033]">Full Name</label>
                           <div className="relative">
                             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
-                            <input 
-                              type="text" 
-                              value={userProfile.name} 
+                            <input
+                              type="text"
+                              value={userProfile.name}
                               onChange={(e) => setUserProfile({ ...userProfile, name: e.target.value })}
                               className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316]"
                             />
@@ -1454,9 +1678,9 @@ function DashboardStyleHome() {
                           <label className="text-xs font-bold text-[#5C4033]">Email Address</label>
                           <div className="relative">
                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
-                            <input 
-                              type="email" 
-                              value={userProfile.email} 
+                            <input
+                              type="email"
+                              value={userProfile.email}
                               onChange={(e) => setUserProfile({ ...userProfile, email: e.target.value })}
                               className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316]"
                             />
@@ -1467,9 +1691,9 @@ function DashboardStyleHome() {
                           <label className="text-xs font-bold text-[#5C4033]">Phone Number</label>
                           <div className="relative">
                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
-                            <input 
-                              type="text" 
-                              value={userProfile.phone} 
+                            <input
+                              type="text"
+                              value={userProfile.phone}
                               onChange={(e) => setUserProfile({ ...userProfile, phone: e.target.value })}
                               className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316]"
                             />
@@ -1480,9 +1704,9 @@ function DashboardStyleHome() {
                           <label className="text-xs font-bold text-[#5C4033]">Community Samaj</label>
                           <div className="relative">
                             <HomeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
-                            <input 
-                              type="text" 
-                              value={userProfile.samaj} 
+                            <input
+                              type="text"
+                              value={userProfile.samaj}
                               disabled
                               className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#F5EDE5] text-[#8C6D58] cursor-not-allowed"
                             />
@@ -1492,8 +1716,8 @@ function DashboardStyleHome() {
 
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-[#5C4033]">Residential Address</label>
-                        <textarea 
-                          value={userProfile.address} 
+                        <textarea
+                          value={userProfile.address}
                           onChange={(e) => setUserProfile({ ...userProfile, address: e.target.value })}
                           rows={2}
                           className="w-full p-3 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316] resize-none"
@@ -1534,7 +1758,7 @@ function DashboardStyleHome() {
                         </div>
                         <h3 className="text-base font-extrabold text-[#3E2723]">Basic Member</h3>
                         <p className="text-[11px] text-warm-muted mt-1">Access the community and see local news.</p>
-                        
+
                         <div className="mt-4 flex items-baseline gap-1">
                           <span className="text-3xl font-extrabold text-[#3E2723]">₹0</span>
                           <span className="text-xs text-warm-muted font-medium">/ year</span>
@@ -1554,17 +1778,16 @@ function DashboardStyleHome() {
                           ))}
                         </ul>
                       </div>
-                      <button 
+                      <button
                         disabled={userProfile.membership === "Basic Member"}
                         onClick={() => {
                           setUserProfile({ ...userProfile, membership: "Basic Member" });
                           alert("Downgraded to Basic Member successfully!");
                         }}
-                        className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${
-                          userProfile.membership === "Basic Member"
+                        className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${userProfile.membership === "Basic Member"
                             ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
                             : "bg-[#FFF5EE] border border-[#EBE3DB] hover:bg-[#F3E8DE] text-[#3E2723]"
-                        }`}
+                          }`}
                       >
                         {userProfile.membership === "Basic Member" ? "Current Plan" : "Downgrade"}
                       </button>
@@ -1581,7 +1804,7 @@ function DashboardStyleHome() {
                         </div>
                         <h3 className="text-base font-extrabold text-[#3E2723]">Premium Member</h3>
                         <p className="text-[11px] text-warm-muted mt-1">Unlock matrimonial, business directory & jobs.</p>
-                        
+
                         <div className="mt-4 flex items-baseline gap-1">
                           <span className="text-3xl font-extrabold text-[#3E2723]">₹999</span>
                           <span className="text-xs text-warm-muted font-medium">/ year</span>
@@ -1603,17 +1826,16 @@ function DashboardStyleHome() {
                           ))}
                         </ul>
                       </div>
-                      <button 
+                      <button
                         disabled={userProfile.membership === "Premium Member"}
                         onClick={() => {
                           setUserProfile({ ...userProfile, membership: "Premium Member" });
                           alert("Upgraded to Premium Member successfully! Thank you for your support!");
                         }}
-                        className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${
-                          userProfile.membership === "Premium Member"
+                        className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${userProfile.membership === "Premium Member"
                             ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
                             : "bg-[#F97316] text-white hover:bg-[#EA580C] shadow-md shadow-[#F97316]/20"
-                        }`}
+                          }`}
                       >
                         {userProfile.membership === "Premium Member" ? "Current Plan" : "Upgrade to Premium"}
                       </button>
@@ -1627,7 +1849,7 @@ function DashboardStyleHome() {
                         </div>
                         <h3 className="text-base font-extrabold text-[#3E2723]">Patron Member</h3>
                         <p className="text-[11px] text-warm-muted mt-1">Lifetime VIP member of the Samaj community.</p>
-                        
+
                         <div className="mt-4 flex items-baseline gap-1">
                           <span className="text-3xl font-extrabold text-[#3E2723]">₹9,999</span>
                           <span className="text-xs text-warm-muted font-medium">/ lifetime</span>
@@ -1649,17 +1871,16 @@ function DashboardStyleHome() {
                           ))}
                         </ul>
                       </div>
-                      <button 
+                      <button
                         disabled={userProfile.membership === "Patron Member"}
                         onClick={() => {
                           setUserProfile({ ...userProfile, membership: "Patron Member" });
                           alert("Thank you for becoming a Patron Life Member! A physical VIP kit will be shipped to your address.");
                         }}
-                        className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${
-                          userProfile.membership === "Patron Member"
+                        className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${userProfile.membership === "Patron Member"
                             ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
                             : "bg-purple-600 text-white hover:bg-purple-700 shadow-md shadow-purple-600/20"
-                        }`}
+                          }`}
                       >
                         {userProfile.membership === "Patron Member" ? "Current Plan" : "Become Patron Member"}
                       </button>
@@ -1688,7 +1909,7 @@ function DashboardStyleHome() {
           {/* 4. Right Sidebar Panel */}
           {activeNav !== "Dashboard" && (
             <aside className="w-[320px] flex-shrink-0 border-l border-[#EBE3DB] bg-[#FAF3EC]/50 p-6 space-y-6 sticky top-16 h-[calc(100vh-4rem)] hidden xl:block overflow-y-auto z-10 pr-4">
-              
+
               {/* Upcoming Events */}
               <div className="bg-white rounded-[20px] border border-[#EBE3DB] p-4 space-y-3.5 shadow-sm text-left">
                 <div className="flex items-center justify-between">
@@ -1721,7 +1942,7 @@ function DashboardStyleHome() {
               {/* Today's Highlights Timeline */}
               <div className="bg-white rounded-[20px] border border-[#EBE3DB] p-4 space-y-3.5 shadow-sm text-left relative overflow-hidden">
                 <h3 className="font-bold text-xs text-[#3E2723] tracking-wide">Today's Highlights</h3>
-                
+
                 <div className="relative space-y-4 pl-1">
                   {/* Timeline vertical connector */}
                   <div className="absolute left-[13px] top-3 bottom-3 w-[1.5px] bg-[#EBE3DB]/60 border-dashed border-l border-[#EBE3DB]/70" />
@@ -1755,19 +1976,18 @@ function DashboardStyleHome() {
           { label: "Jobs", icon: Briefcase },
           { label: "Events", icon: Calendar }
         ].map((item, i) => (
-          <button 
-            key={i} 
+          <button
+            key={i}
             onClick={() => handleNavClick(item.label === "Home" ? "Dashboard" : item.label)}
             className="flex flex-col items-center gap-1 text-[9px] text-[#8C6D58]"
           >
-            <item.icon className={`w-5 h-5 ${
-              (activeNav === "Dashboard" && item.label === "Home") || activeNav === item.label
-                ? "text-[#F97316]" 
+            <item.icon className={`w-5 h-5 ${(activeNav === "Dashboard" && item.label === "Home") || activeNav === item.label
+                ? "text-[#F97316]"
                 : "text-[#8C6D58]"
-            }`} />
+              }`} />
             <span className={
               (activeNav === "Dashboard" && item.label === "Home") || activeNav === item.label
-                ? "text-[#F97316] font-bold" 
+                ? "text-[#F97316] font-bold"
                 : "text-warm-muted font-medium"
             }>
               {item.label}
@@ -1777,7 +1997,7 @@ function DashboardStyleHome() {
       </div>
 
       {/* --- INTERACTIVE MODALS --- */}
-      
+
       {/* 1. News Detail Modal */}
       {selectedNews && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1792,7 +2012,7 @@ function DashboardStyleHome() {
               <p className="text-xs text-warm-muted mt-1 font-medium">Published on {selectedNews.date || "Today"} · {selectedNews.location || "General"}</p>
             </div>
             <p className="text-xs text-warm-muted leading-relaxed whitespace-pre-line">
-              {selectedNews.excerpt} Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam nec finibus ex. Praesent hendrerit sem sem, ac elementum lacus sollicitudin eu. Phasellus mollis lectus sit amet dui viverra pulvinar. Proin non elit ac lectus iaculis dictum. 
+              {selectedNews.excerpt} Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam nec finibus ex. Praesent hendrerit sem sem, ac elementum lacus sollicitudin eu. Phasellus mollis lectus sit amet dui viverra pulvinar. Proin non elit ac lectus iaculis dictum.
               <br /><br />
               Sed ac finibus neque, sit amet feugiat ex. Quisque pretium lorem ex, eget imperdiet erat commodo at. Duis consequat accumsan scelerisque. Curabitur vitae purus eleifend, iaculis erat sit amet, sodales erat.
             </p>
@@ -1839,7 +2059,7 @@ function DashboardStyleHome() {
               <X className="w-4 h-4" />
             </button>
             <h3 className="font-extrabold text-base text-[#3E2723]">Post a New Job Opportunity</h3>
-            
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!newJob.role || !newJob.company || !newJob.location) return;
@@ -1855,7 +2075,7 @@ function DashboardStyleHome() {
                   applicants: 0,
                   desc: newJob.desc || "No description provided."
                 };
-                
+
                 const createdJob = await api.createJob(jobPayload);
                 const mappedJob = {
                   ...createdJob,
@@ -1872,8 +2092,8 @@ function DashboardStyleHome() {
             }} className="space-y-3.5">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#5C4033]">Job Role / Title</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   placeholder="e.g. Senior Accountant, Flutter Developer"
                   value={newJob.role}
@@ -1883,8 +2103,8 @@ function DashboardStyleHome() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#5C4033]">Company Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   placeholder="e.g. Patel Exports Ltd."
                   value={newJob.company}
@@ -1895,8 +2115,8 @@ function DashboardStyleHome() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-[#5C4033]">Location</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     required
                     placeholder="e.g. Ahmedabad, Surat"
                     value={newJob.location}
@@ -1906,8 +2126,8 @@ function DashboardStyleHome() {
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-[#5C4033]">Salary Range</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g. ₹6-8 LPA"
                     value={newJob.salary}
                     onChange={(e) => setNewJob({ ...newJob, salary: e.target.value })}
@@ -1917,7 +2137,7 @@ function DashboardStyleHome() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#5C4033]">Brief Job Description</label>
-                <textarea 
+                <textarea
                   rows={2}
                   placeholder="Responsibilities, requirements, skills..."
                   value={newJob.desc}
@@ -1944,7 +2164,7 @@ function DashboardStyleHome() {
               <h3 className="font-extrabold text-lg text-[#3E2723]">Register for Event</h3>
               <p className="text-xs text-warm-muted">{registeringEvent.event.title}</p>
             </div>
-            
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               const payload = {
@@ -1972,8 +2192,8 @@ function DashboardStyleHome() {
             }} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#5C4033]">Your Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   value={regForm.name}
                   onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
@@ -1982,8 +2202,8 @@ function DashboardStyleHome() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#5C4033]">Email Address</label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   required
                   value={regForm.email}
                   onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
@@ -1992,8 +2212,8 @@ function DashboardStyleHome() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#5C4033]">Phone Number</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   value={regForm.phone}
                   onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
@@ -2002,7 +2222,7 @@ function DashboardStyleHome() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#5C4033]">Number of Attendees</label>
-                <select 
+                <select
                   value={regForm.attendees}
                   onChange={(e) => setRegForm({ ...regForm, attendees: parseInt(e.target.value) })}
                   className="w-full p-2.5 text-xs rounded-xl border border-[#EBE3DB] bg-white focus:outline-none focus:border-[#F97316]"
@@ -2041,7 +2261,7 @@ function DashboardStyleHome() {
               <div className="flex justify-center gap-6 relative">
                 {/* Connector Line to Children */}
                 <div className="absolute bottom-[-16px] left-1/2 -translate-x-1/2 w-0.5 h-4 bg-[#EBE3DB]" />
-                
+
                 <div className="bg-[#FFF8F2] border border-[#EBE3DB] p-2.5 rounded-xl text-center w-28 shadow-2xs">
                   <span className="text-[9px] font-bold text-[#F97316] bg-[#FDF2E9] px-2 py-0.5 rounded-full block w-max mx-auto mb-1">Father</span>
                   <div className="text-[11px] font-bold text-[#3E2723] truncate">{selectedFamilyTree.father.name}</div>
@@ -2061,7 +2281,7 @@ function DashboardStyleHome() {
                 <div className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-[#EBE3DB]" />
                 <div className="absolute top-0 left-1/4 w-0.5 h-2 bg-[#EBE3DB]" />
                 <div className="absolute top-0 right-1/4 w-0.5 h-2 bg-[#EBE3DB]" />
-                
+
                 <div className="flex justify-center gap-6 pt-2">
                   <div className="bg-[#FAF3EC] border-2 border-[#F97316] p-2.5 rounded-xl text-center w-28 shadow-2xs relative">
                     <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[8px] font-bold text-white bg-[#F97316] px-1.5 py-0.5 rounded-full">Self</span>
@@ -2090,7 +2310,7 @@ function DashboardStyleHome() {
             <button onClick={() => setShowReceipt(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#FAF3EC] flex items-center justify-center hover:bg-[#FDF2E9] hover:text-[#F97316] transition cursor-pointer">
               <X className="w-4 h-4" />
             </button>
-            
+
             <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
               <Check className="w-6 h-6 stroke-[3]" />
             </div>
@@ -2123,7 +2343,7 @@ function DashboardStyleHome() {
               </div>
             </div>
 
-            <button 
+            <button
               onClick={() => {
                 downloadReceiptPdf({
                   campaign: showReceipt.campaign,

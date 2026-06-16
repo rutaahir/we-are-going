@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { CheckCircle, XCircle, Clock, FileText, AlertCircle, Building2, MapPin, User, Globe, ChevronRight } from "lucide-react";
 import { PageWrap } from "@/components/wag/PageWrap";
-import { AnimatedCard, DetailDrawer, PlanBadge, StatusBadge, AvatarCircle } from "@/components/wag/primitives";
+import { AnimatedCard, Modal, PlanBadge, StatusBadge, AvatarCircle } from "@/components/wag/primitives";
 import { useAuth } from "@/context/AuthContext";
-import { api } from "@/lib/api";
+import { api, getImageUrl } from "@/lib/api";
 
 export const Route = createFileRoute("/community-admin/subsidiaries")({
   component: () => {
@@ -20,23 +20,35 @@ export const Route = createFileRoute("/community-admin/subsidiaries")({
     const tabs = ["All", "Pending", "Approved", "Rejected"];
 
     const fetchCommunities = () => {
-      if (!user || !user.communityId) return;
+      if (!user) return;
+      if (!user.communityId && user.role !== "super_admin") {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       api.getCommunities()
         .then(res => {
           // Filter only communities where parent matches the current user's community ID
-          const linked = (res || []).filter((c: any) => String(c.parent) === String(user.communityId));
+          const linked = user.communityId
+            ? (res || []).filter((c: any) => String(c.parent) === String(user.communityId))
+            : (res || []);
           setCommunities(linked);
-          setLoading(false);
         })
         .catch(err => {
           console.error(err);
+        })
+        .finally(() => {
           setLoading(false);
         });
     };
 
     useEffect(() => {
       fetchCommunities();
+      const handleUpdate = () => {
+        fetchCommunities();
+      };
+      window.addEventListener("community-updated", handleUpdate);
+      return () => window.removeEventListener("community-updated", handleUpdate);
     }, [user]);
 
     useEffect(() => {
@@ -87,7 +99,7 @@ export const Route = createFileRoute("/community-admin/subsidiaries")({
     });
 
     return (
-      <PageWrap title="Subsidiary Community Requests" desc="Review and approve registration requests under your Super Community.">
+      <PageWrap title="Subsidiary Community Requests" desc="Review and approve registration requests under your Community.">
         <div className="flex gap-2 border-b border-warm mb-6 overflow-x-auto">
           {tabs.map(t => (
             <button
@@ -182,217 +194,165 @@ export const Route = createFileRoute("/community-admin/subsidiaries")({
           </AnimatedCard>
         )}
 
-        <DetailDrawer open={!!open} onClose={() => setOpen(null)} title={open?.name}>
+        <Modal open={!!open} onClose={() => { setOpen(null); setErrorMsg(null); setRemarks(""); }} title={open?.name || "Subsidiary Details"} size="lg">
           {open && (
-            <div className="space-y-6">
-              <div className="relative">
-                <img 
-                  src={open.cover_url || open.cover || "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800"} 
-                  alt="" 
-                  className="w-full h-40 object-cover rounded-xl shadow-inner border border-warm" 
+            <div className="space-y-5">
+              {/* Header Banner */}
+              <div className="relative rounded-xl overflow-hidden">
+                <img
+                  src={open.cover_url || open.cover ? getImageUrl(open.cover_url || open.cover) : "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800"}
+                  alt=""
+                  className="w-full h-32 object-cover"
                 />
-                <div className="absolute left-6 -bottom-8">
-                  <AvatarCircle name={open.name} src={open.logo_url || open.logo} size={80} />
-                </div>
-              </div>
-
-              <div className="pt-6">
-                <div className="flex justify-between items-start">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                <div className="absolute bottom-3 left-4 flex items-end gap-3">
+                  <AvatarCircle name={open.name} src={open.logo_url || open.logo} size={56} />
                   <div>
-                    <h3 className="font-ui font-bold text-xl text-foreground">{open.name}</h3>
-                    <p className="text-xs text-warm-muted">
-                      {open.village ? `${open.village}, ` : ""}{open.district}, {open.state}
-                    </p>
+                    <h3 className="font-ui font-bold text-white text-base leading-tight">{open.name}</h3>
+                    <p className="text-white/70 text-xs">{open.village ? `${open.village}, ` : ""}{open.district}, {open.state}</p>
                   </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <StatusBadge status={open.status} />
-                    <PlanBadge plan={open.plan} />
-                  </div>
+                </div>
+                <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
+                  <StatusBadge status={open.status} />
+                  <PlanBadge plan={open.plan} />
                 </div>
               </div>
 
-              <p className="text-sm text-warm-muted leading-relaxed bg-sand/35 p-3.5 rounded-xl border border-warm/40">
-                {open.desc || "No description provided."}
-              </p>
+              {/* Description */}
+              {open.desc && (
+                <p className="text-sm text-warm-muted leading-relaxed bg-sand/35 px-3.5 py-3 rounded-xl border border-warm/40">
+                  {open.desc}
+                </p>
+              )}
 
-              {/* Submitted Registration Data */}
-              <div className="border-t border-warm pt-4">
-                <h4 className="font-ui font-bold text-sm text-foreground mb-3 flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-primary" />
-                  Registration Information & Contact Details
+              {/* Registration Info Grid */}
+              <div>
+                <h4 className="font-ui font-bold text-xs text-warm-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-primary" /> Registration & Contact
                 </h4>
-                <div className="bg-sand/35 p-4 rounded-xl border border-warm/40 space-y-3 text-xs">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <span className="text-warm-muted block">Caste / Sub-Caste</span>
-                      <span className="font-semibold text-foreground">
-                        {open.caste || "N/A"} {open.sub_caste ? `(${open.sub_caste})` : ""}
-                      </span>
+                <div className="grid grid-cols-2 gap-2 text-xs bg-sand/30 p-3 rounded-xl border border-warm/40">
+                  {[
+                    ["Caste / Sub-Caste", `${open.caste || "N/A"}${open.sub_caste ? ` (${open.sub_caste})` : ""}`],
+                    ["Registration No.", open.registration_no || "N/A"],
+                    ["Email", open.email || "N/A"],
+                    ["Phone", open.phone || "N/A"],
+                    ["Admin Name", open.admin_name || "N/A"],
+                    ["Admin Email", open.admin_email || "N/A"],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <span className="text-warm-muted block">{label}</span>
+                      <span className="font-semibold text-foreground break-all">{value}</span>
                     </div>
-                    <div>
-                      <span className="text-warm-muted block">Registration No.</span>
-                      <span className="font-semibold text-foreground">{open.registration_no || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-warm-muted block">Email</span>
-                      <span className="font-semibold text-foreground">{open.email || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-warm-muted block">Phone</span>
-                      <span className="font-semibold text-foreground">{open.phone || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-warm-muted block">Admin Name</span>
-                      <span className="font-semibold text-foreground">{open.admin_name || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="text-warm-muted block">Admin Email</span>
-                      <span className="font-semibold text-foreground">{open.admin_email || "N/A"}</span>
-                    </div>
+                  ))}
+                  {open.website && (
                     <div className="col-span-2">
                       <span className="text-warm-muted block">Website</span>
-                      {open.website ? (
-                        <a href={open.website} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline truncate block">
-                          {open.website}
-                        </a>
-                      ) : (
-                        <span className="font-semibold text-foreground">N/A</span>
-                      )}
+                      <a href={open.website} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline truncate block">{open.website}</a>
                     </div>
-                  </div>
-
-                  <div className="border-t border-warm/60 pt-2">
-                    <span className="text-warm-muted block mb-1">Office Address</span>
-                    <span className="font-semibold text-foreground block whitespace-pre-line">{open.office_address || "N/A"}</span>
-                  </div>
-
-                  <div className="border-t border-warm/60 pt-2">
-                    <span className="text-warm-muted block mb-1">Vision & Mission</span>
-                    <span className="font-semibold text-foreground block whitespace-pre-line">{open.vision_mission || "N/A"}</span>
-                  </div>
-
-                  <div className="border-t border-warm/60 pt-2 grid grid-cols-3 gap-2">
-                    <div>
-                      <span className="text-warm-muted block">Facebook</span>
-                      <span className="font-semibold text-foreground truncate block">{open.social_fb || "N/A"}</span>
+                  )}
+                  {open.office_address && (
+                    <div className="col-span-2 border-t border-warm/60 pt-2 mt-1">
+                      <span className="text-warm-muted block mb-0.5">Office Address</span>
+                      <span className="font-semibold text-foreground whitespace-pre-line">{open.office_address}</span>
                     </div>
-                    <div>
-                      <span className="text-warm-muted block">Twitter</span>
-                      <span className="font-semibold text-foreground truncate block">{open.social_tw || "N/A"}</span>
+                  )}
+                  {open.vision_mission && (
+                    <div className="col-span-2 border-t border-warm/60 pt-2 mt-1">
+                      <span className="text-warm-muted block mb-0.5">Vision & Mission</span>
+                      <span className="font-semibold text-foreground whitespace-pre-line">{open.vision_mission}</span>
                     </div>
-                    <div>
-                      <span className="text-warm-muted block">YouTube</span>
-                      <span className="font-semibold text-foreground truncate block">{open.social_yt || "N/A"}</span>
+                  )}
+                  {(open.social_fb || open.social_tw || open.social_yt) && (
+                    <div className="col-span-2 border-t border-warm/60 pt-2 mt-1 grid grid-cols-3 gap-2">
+                      <div><span className="text-warm-muted block">Facebook</span><span className="font-semibold truncate block">{open.social_fb || "N/A"}</span></div>
+                      <div><span className="text-warm-muted block">Twitter</span><span className="font-semibold truncate block">{open.social_tw || "N/A"}</span></div>
+                      <div><span className="text-warm-muted block">YouTube</span><span className="font-semibold truncate block">{open.social_yt || "N/A"}</span></div>
                     </div>
-                  </div>
-
+                  )}
                   {open.doc_name && (
-                    <div className="border-t border-warm/60 pt-2">
-                      <span className="text-warm-muted block mb-1">Verification Document Reference</span>
-                      <span className="font-semibold text-primary flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5" /> {open.doc_name}
-                      </span>
+                    <div className="col-span-2 border-t border-warm/60 pt-2 mt-1">
+                      <span className="text-warm-muted block mb-0.5">Verification Document</span>
+                      <span className="font-semibold text-primary flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />{open.doc_name}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Approval History / Audit Trail */}
-              <div className="border-t border-warm pt-4">
-                <h4 className="font-ui font-bold text-sm text-foreground mb-3 flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-primary" />
-                  Approval Workflow & History
+              {/* Approval History */}
+              <div>
+                <h4 className="font-ui font-bold text-xs text-warm-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5 text-primary" /> Approval History
                 </h4>
-                <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-warm">
+                <div className="relative pl-5 space-y-3 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-warm">
                   {open.approval_history && open.approval_history.length > 0 ? (
                     open.approval_history.map((hist: any, index: number) => (
                       <div key={index} className="relative text-xs">
-                        <div className={`absolute -left-6 rounded-full w-4 h-4 border-2 bg-surface flex items-center justify-center ${
-                          hist.status === "Approved" || hist.status === "Active"
-                            ? "border-teal" 
-                            : hist.status.startsWith("Rejected")
-                            ? "border-red-500"
-                            : "border-primary"
+                        <div className={`absolute -left-5 rounded-full w-4 h-4 border-2 bg-surface flex items-center justify-center ${
+                          hist.status === "Approved" || hist.status === "Active" ? "border-teal"
+                          : hist.status.startsWith("Rejected") ? "border-red-500" : "border-primary"
                         }`}>
                           <div className={`w-1.5 h-1.5 rounded-full ${
-                            hist.status === "Approved" || hist.status === "Active"
-                              ? "bg-teal"
-                              : hist.status.startsWith("Rejected")
-                              ? "bg-red-500"
-                              : "bg-primary"
+                            hist.status === "Approved" || hist.status === "Active" ? "bg-teal"
+                            : hist.status.startsWith("Rejected") ? "bg-red-500" : "bg-primary"
                           }`} />
                         </div>
                         <div className="flex justify-between font-semibold text-foreground">
                           <span>{hist.approval_level} Level</span>
-                          <span className="text-[10px] text-warm-muted">
-                            {new Date(hist.approved_date).toLocaleDateString()}
-                          </span>
+                          <span className="text-[10px] text-warm-muted">{new Date(hist.approved_date).toLocaleDateString()}</span>
                         </div>
-                        <div className="text-warm-muted mt-0.5">
-                          Status: <span className="font-medium">{hist.status}</span>
-                          {hist.approved_by_username && ` by ${hist.approved_by_username}`}
-                        </div>
-                        {hist.remarks && (
-                          <div className="bg-sand/30 p-2 rounded border border-warm/50 mt-1 text-[11px] text-warm-muted italic">
-                            "{hist.remarks}"
-                          </div>
-                        )}
+                        <div className="text-warm-muted mt-0.5">Status: <span className="font-medium">{hist.status}</span>{hist.approved_by_username && ` by ${hist.approved_by_username}`}</div>
+                        {hist.remarks && <div className="bg-sand/30 p-2 rounded border border-warm/50 mt-1 text-[11px] text-warm-muted italic">"{hist.remarks}"</div>}
                       </div>
                     ))
                   ) : (
-                    <div className="text-xs text-warm-muted italic py-1">
-                      No approval workflow timeline recorded yet.
-                    </div>
+                    <div className="text-xs text-warm-muted italic py-1">No approval history recorded yet.</div>
                   )}
                 </div>
               </div>
 
-              {/* Action Panel */}
+              {/* Action Panel for Pending */}
               {open.status === "Pending Parent Community Approval" && (
-                <div className="border-t border-warm pt-4 space-y-3.5">
+                <div className="border-t border-warm pt-4 space-y-3">
+                  <h4 className="font-ui font-bold text-xs text-warm-muted uppercase tracking-wider">Take Action</h4>
                   <div>
-                    <label className="text-xs font-semibold block mb-1.5 text-foreground">
-                      Approval / Rejection Comments *
-                    </label>
+                    <label className="text-xs font-semibold block mb-1.5 text-foreground">Remarks (mandatory for rejection)</label>
                     <textarea
-                      rows={2.5}
-                      placeholder="Add remarks or justification. Reason is mandatory for rejection."
+                      rows={3}
+                      placeholder="Add remarks or justification..."
                       value={remarks}
                       onChange={e => setRemarks(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-warm bg-surface focus:border-primary outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-warm bg-surface focus:border-primary outline-none resize-none"
                     />
                   </div>
-
                   {errorMsg && (
                     <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 flex-shrink-0" />
                       <span>{errorMsg}</span>
                     </div>
                   )}
-
-                  <div className="grid grid-cols-2 gap-3.5">
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       disabled={actionLoading}
                       onClick={() => handleApprove(open.id)}
-                      className="py-2.5 rounded-xl bg-teal text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm shadow-teal/10 hover:bg-teal-600 transition-colors disabled:opacity-50"
+                      className="py-2.5 rounded-xl bg-teal text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-teal-600 transition-colors disabled:opacity-50"
                     >
-                      <CheckCircle className="w-4.5 h-4.5" />
-                      {actionLoading ? "Processing..." : "Approve"}
+                      <CheckCircle className="w-4 h-4" />
+                      {actionLoading ? "Processing..." : "✓ Approve"}
                     </button>
                     <button
                       disabled={actionLoading}
                       onClick={() => handleReject(open.id)}
-                      className="py-2.5 rounded-xl bg-red-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm shadow-red-500/10 hover:bg-red-600 transition-colors disabled:opacity-50"
+                      className="py-2.5 rounded-xl bg-red-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-red-600 transition-colors disabled:opacity-50"
                     >
-                      <XCircle className="w-4.5 h-4.5" />
-                      {actionLoading ? "Processing..." : "Reject"}
+                      <XCircle className="w-4 h-4" />
+                      {actionLoading ? "Processing..." : "✕ Reject"}
                     </button>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </DetailDrawer>
+        </Modal>
       </PageWrap>
     );
   },

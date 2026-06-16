@@ -9,6 +9,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import Navbar from "@/components/wag/Navbar";
 import Footer from "@/components/wag/Footer";
 import { DiamondBackground } from "@/components/wag/DiamondBackground";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFound() {
   return (
@@ -89,6 +90,7 @@ function RootComponent() {
           </AnimatePresence>
           {!hideNavbarAndFooter && <Footer />}
         </div>
+        <Toaster position="top-right" richColors />
       </AuthProvider>
     </QueryClientProvider>
   );

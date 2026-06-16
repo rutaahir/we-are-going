@@ -1,24 +1,24 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  CheckCircle2, 
-  Upload, 
-  X, 
-  Building2, 
-  Search, 
-  Trash2, 
-  Plus, 
-  Check, 
-  FileText, 
-  Info, 
-  DollarSign, 
-  MapPin, 
-  ShieldCheck, 
-  Activity, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  Upload,
+  X,
+  Building2,
+  Search,
+  Trash2,
+  Plus,
+  Check,
+  FileText,
+  Info,
+  DollarSign,
+  MapPin,
+  ShieldCheck,
+  Activity,
   Calendar,
   Lock,
   XCircle,
@@ -59,7 +59,7 @@ const MOCK_PARENTS = [
 
 function CommReg() {
   const navigate = useNavigate();
-  
+
   // Load draft states from sessionStorage if available
   const [step, setStep] = useState(() => {
     const saved = sessionStorage.getItem("reg_community_step");
@@ -72,20 +72,28 @@ function CommReg() {
       try {
         const d = JSON.parse(saved);
         return d.parentId || "";
-      } catch (e) {}
+      } catch (e) { }
     }
     return "";
   });
   const [dir, setDir] = useState(1);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAdminPass, setShowAdminPass] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [createdCommunityInfo, setCreatedCommunityInfo] = useState<any | null>(() => {
     const saved = sessionStorage.getItem("wag_registered_community");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return null;
   });
+
+  // Store actual File objects (cannot be in sessionStorage)
+  const logoFileRef = useRef<File | null>(null);
+  const coverFileRef = useRef<File | null>(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -97,7 +105,7 @@ function CommReg() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {}
+      } catch (e) { }
     }
     return {
       name: "",
@@ -138,7 +146,7 @@ function CommReg() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {}
+      } catch (e) { }
     }
     return [];
   });
@@ -205,9 +213,31 @@ function CommReg() {
 
     // Basic Validation
     if (step === 0) {
+      if (!formData.logo) return setErrorMsg("Community Logo is required.");
+      if (!formData.cover) return setErrorMsg("Community Cover Image is required.");
       if (!formData.name.trim()) return setErrorMsg("Community Name is required");
+      if (!/^[a-zA-Z\s]{3,100}$/.test(formData.name.trim())) {
+        return setErrorMsg("Community Name must be between 3 and 100 characters and contain only letters and spaces.");
+      }
+      if (!formData.caste) return setErrorMsg("Caste is required.");
       if (!formData.email.trim()) return setErrorMsg("Contact Email is required");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+        return setErrorMsg("Please enter a valid contact email address.");
+      }
       if (!formData.phone.trim()) return setErrorMsg("Contact Phone is required");
+      if (!formData.registrationNo || !formData.registrationNo.trim()) return setErrorMsg("Registration Number is required.");
+      if (!formData.estYear) return setErrorMsg("Established Year is required.");
+      const currentYear = new Date().getFullYear();
+      if (parseInt(formData.estYear, 10) > currentYear) {
+        return setErrorMsg("Established Year cannot be in the future.");
+      }
+      if (!formData.officeAddress || !formData.officeAddress.trim()) return setErrorMsg("Office Address is required.");
+      if (!formData.visionMission || formData.visionMission.trim().length < 20) {
+        return setErrorMsg("Vision & Mission statement must be at least 20 characters.");
+      }
+      if (!formData.desc || formData.desc.trim().length < 50) {
+        return setErrorMsg("About Community/Description must be at least 50 characters.");
+      }
       if (formData.type === "Subsidiary" && !formData.parentId) {
         return setErrorMsg("Parent Community selection is required for Subsidiary communities. Please click on Subsidiary again to choose a parent.");
       }
@@ -217,50 +247,97 @@ function CommReg() {
         return setErrorMsg("Please select a Parent Community for Subsidiary registration");
       }
       if (!formData.adminName.trim()) return setErrorMsg("Admin Contact Name is required");
+      if (!/^[a-zA-Z\s]{3,100}$/.test(formData.adminName.trim())) {
+        return setErrorMsg("Admin Contact Name must be between 3 and 100 characters and contain only letters and spaces.");
+      }
       if (!formData.adminEmail.trim()) return setErrorMsg("Admin Account Email is required");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.adminEmail.trim())) {
+        return setErrorMsg("Please enter a valid admin email address.");
+      }
+      if (!formData.adminPhone || !/^\d{10}$/.test(formData.adminPhone.trim())) {
+        return setErrorMsg("Admin Phone must be exactly 10 digits.");
+      }
       if (!formData.adminPass.trim()) return setErrorMsg("Admin Password is required");
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+      if (!passwordRegex.test(formData.adminPass)) {
+        return setErrorMsg("Admin Password must be at least 8 characters long, and include at least one uppercase letter, one lowercase letter, one number, and one special character.");
+      }
+    }
+    if (step === 2) {
+      if (committee.length === 0) {
+        return setErrorMsg("At least 1 committee member is required to proceed.");
+      }
+      for (const member of committee) {
+        if (!member.name.trim()) return setErrorMsg("Committee member name is required.");
+        if (!member.role) return setErrorMsg(`Role is required for committee member "${member.name}".`);
+        if (!member.phone || !/^\d{10}$/.test(member.phone.trim())) {
+          return setErrorMsg(`Committee member "${member.name}" must have a valid 10-digit phone number.`);
+        }
+        if (!member.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(member.email.trim())) {
+          return setErrorMsg(`Committee member "${member.name}" must have a valid email address.`);
+        }
+        if (!member.avatar) {
+          return setErrorMsg(`Committee member "${member.name}" must have a photo uploaded.`);
+        }
+      }
+    }
+    if (step === 3) {
+      if (!formData.docName) {
+        return setErrorMsg("Registration Certificate document is required.");
+      }
     }
 
     if (step === 3) {
       setIsSubmitting(true);
       try {
-        // 1. Prepare community data
-        const communityPayload = {
-          name: formData.name,
-          type: formData.type,
-          parent: formData.type === "Subsidiary" ? parseInt(formData.parentId, 10) : null,
-          state: formData.state,
-          district: formData.district,
-          taluka: formData.taluka || "Rajula",
-          village: formData.village || "Rampara",
-          plan: formData.plan,
-          status: "Pending Super Admin Approval",
-          desc: formData.desc || "Established community registration.",
-          logo_url: (formData.logo && !formData.logo.startsWith("blob:")) ? formData.logo : "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=120",
-          cover_url: (formData.cover && !formData.cover.startsWith("blob:")) ? formData.cover : "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800",
-          admin_name: formData.adminName,
-          admin_email: formData.adminEmail,
-          admin_phone: formData.adminPhone,
-          admin_password: formData.adminPass,
-          caste: formData.caste,
-          sub_caste: formData.subCaste,
-          email: formData.email,
-          phone: formData.phone,
-          est_year: formData.estYear ? parseInt(formData.estYear, 10) : null,
-          registration_no: formData.registrationNo,
-          office_address: formData.officeAddress,
-          website: formData.website,
-          vision_mission: formData.visionMission || null,
-          social_fb: formData.socialFb || null,
-          social_tw: formData.socialTw || null,
-          social_yt: formData.socialYt || null,
-          doc_name: formData.docName || null
-        };
+        // Build FormData to support actual file uploads
+        const fd = new FormData();
+        fd.append("name", formData.name);
+        fd.append("type", formData.type);
+        if (formData.type === "Subsidiary" && formData.parentId) {
+          fd.append("parent", formData.parentId);
+        }
+        fd.append("state", formData.state);
+        fd.append("district", formData.district);
+        fd.append("taluka", formData.taluka || "N/A");
+        fd.append("village", formData.village || "N/A");
+        fd.append("plan", formData.plan);
+        fd.append("status", "Pending Super Admin Approval");
+        fd.append("desc", formData.desc || "Established community registration.");
+        fd.append("admin_name", formData.adminName);
+        fd.append("admin_email", formData.adminEmail);
+        fd.append("admin_phone", formData.adminPhone);
+        fd.append("admin_password", formData.adminPass);
+        if (formData.caste) fd.append("caste", formData.caste);
+        if (formData.subCaste) fd.append("sub_caste", formData.subCaste);
+        if (formData.email) fd.append("email", formData.email);
+        if (formData.phone) fd.append("phone", formData.phone);
+        if (formData.estYear) fd.append("est_year", formData.estYear);
+        if (formData.registrationNo) fd.append("registration_no", formData.registrationNo);
+        if (formData.officeAddress) fd.append("office_address", formData.officeAddress);
+        if (formData.website) fd.append("website", formData.website);
+        if (formData.visionMission) fd.append("vision_mission", formData.visionMission);
+        if (formData.socialFb) fd.append("social_fb", formData.socialFb);
+        if (formData.socialTw) fd.append("social_tw", formData.socialTw);
+        if (formData.socialYt) fd.append("social_yt", formData.socialYt);
+        if (formData.docName) fd.append("doc_name", formData.docName);
+
+        // Attach actual File objects if the user uploaded them
+        if (logoFileRef.current) {
+          fd.append("logo", logoFileRef.current);
+        } else if (formData.logo && !formData.logo.startsWith("blob:")) {
+          fd.append("logo_url", formData.logo);
+        }
+        if (coverFileRef.current) {
+          fd.append("cover", coverFileRef.current);
+        } else if (formData.cover && !formData.cover.startsWith("blob:")) {
+          fd.append("cover_url", formData.cover);
+        }
 
         // 2. Submit community
         let createdCommunity;
         try {
-          createdCommunity = await api.createCommunity(communityPayload);
+          createdCommunity = await api.createCommunity(fd);
         } catch (err: any) {
           err.errorContext = "community";
           throw err;
@@ -297,17 +374,17 @@ function CommReg() {
 
       } catch (err: any) {
         console.error("Submission failed: ", err);
-        
+
         let displayError = err.message || "Failed to register community in the Django database. Please verify the backend API is running.";
-        
+
         // Handle field-specific validation errors and redirect/focus
         if (err.errorFields && typeof err.errorFields === 'object') {
           const firstErrorKey = Object.keys(err.errorFields)[0];
           if (firstErrorKey) {
-            const errorText = Array.isArray(err.errorFields[firstErrorKey]) 
-              ? err.errorFields[firstErrorKey].join(', ') 
+            const errorText = Array.isArray(err.errorFields[firstErrorKey])
+              ? err.errorFields[firstErrorKey].join(', ')
               : err.errorFields[firstErrorKey];
-            
+
             if (err.errorContext === "committee") {
               // Redirect to Step 2 (Committee Builder)
               setStep(2);
@@ -329,8 +406,8 @@ function CommReg() {
               // Step 2: Committee Builder
               // Step 3: Review & Documents
               const step0Fields = [
-                "name", "caste", "subCaste", "state", "district", "taluka", "village", 
-                "estYear", "registrationNo", "desc", "officeAddress", "logo", "cover", 
+                "name", "caste", "subCaste", "state", "district", "taluka", "village",
+                "estYear", "registrationNo", "desc", "officeAddress", "logo", "cover",
                 "email", "phone", "website"
               ];
               const step1Fields = [
@@ -346,7 +423,7 @@ function CommReg() {
 
               setStep(targetStep);
               displayError = `Error in field "${firstErrorKey}": ${errorText}`;
-              
+
               // Scroll to and focus the field
               setTimeout(() => {
                 const selector = `[name="${fieldName}"], input[placeholder*="${fieldName}"], select[name="${fieldName}"], textarea[name="${fieldName}"]`;
@@ -388,14 +465,14 @@ function CommReg() {
         <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
-            <motion.h1 
+            <motion.h1
               initial={{ y: -15, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               className="font-display text-4xl sm:text-5xl font-bold text-foreground"
             >
               Register Your Samaj
             </motion.h1>
-            <motion.p 
+            <motion.p
               initial={{ y: 15, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.1 }}
@@ -407,7 +484,7 @@ function CommReg() {
 
           {/* Main Card */}
           <div className="bg-surface rounded-2xl shadow-warm border border-warm overflow-hidden mt-6">
-            
+
             {/* Draft Saved Indicator */}
             {step < 4 && (
               <div className="bg-primary/5 border-b border-primary/10 px-6 py-2.5 flex justify-between items-center text-xs text-primary font-medium">
@@ -436,15 +513,15 @@ function CommReg() {
                       <p className="text-xs text-warm-muted mt-0.5">{STEPS[step].desc}</p>
                     </div>
                   </div>
-                  
+
                   {/* Progress Line Segments */}
                   <div className="grid grid-cols-4 gap-2">
                     {STEPS.slice(0, 4).map((s, i) => (
                       <div key={i} className="h-1.5 rounded-full bg-sand-dark/25 overflow-hidden relative">
-                        <motion.div 
+                        <motion.div
                           className={`absolute inset-0 ${step > i ? "bg-teal" : "bg-gradient-to-r from-primary to-gold"}`}
                           initial={{ width: "0%" }}
-                          animate={{ 
+                          animate={{
                             width: step >= i ? "100%" : "0%"
                           }}
                           transition={{ duration: 0.4, ease: "easeInOut" }}
@@ -465,34 +542,115 @@ function CommReg() {
                   transition={{ duration: 0.25, ease: "easeInOut" }}
                 >
                   {step === 0 && (
-                    <StepInfo 
-                      formData={formData} 
-                      updateField={updateField} 
+                    <StepInfo
+                      formData={formData}
+                      updateField={updateField}
                       setShowParentModal={setShowParentModal}
+                      logoFileRef={logoFileRef}
+                      coverFileRef={coverFileRef}
                     />
                   )}
                   {step === 1 && (
-                    <StepHierarchy 
-                      formData={formData} 
-                      updateField={updateField} 
-                    />
-                  )}
-                  {step === 2 && (
-                    <StepCommittee 
-                      committee={committee} 
-                      setCommittee={setCommittee} 
-                    />
-                  )}
-                  {step === 3 && (
-                    <StepReview 
-                      formData={formData} 
-                      committee={committee} 
+                    <StepHierarchy
+                      formData={formData}
                       updateField={updateField}
                     />
                   )}
-                  {step === 4 && (
-                    <StepSuccess 
-                      formData={formData} 
+                  {step === 2 && (
+                    <StepCommittee
+                      committee={committee}
+                      setCommittee={setCommittee}
+                    />
+                  )}
+                  {step === 3 && (
+                    <StepReview
+                      formData={formData}
+                      committee={committee}
+                      updateField={updateField}
+                    />
+                  )}
+                  {step === 4 && !otpVerified && (
+                    <div className="max-w-md mx-auto py-8 text-center space-y-6">
+                      <h2 className="font-serif text-2xl font-bold text-[#2C1D12]">Verify Admin Email</h2>
+                      <p className="text-warm-muted text-xs sm:text-sm">
+                        A 6-digit verification code has been sent to <strong>{formData.adminEmail}</strong>.
+                      </p>
+
+                      <div className="space-y-4 text-left">
+                        <div>
+                          <label className="text-[10px] font-bold text-warm-muted uppercase tracking-wider block mb-1">
+                            Registered Admin Email
+                          </label>
+                          <input
+                            type="text"
+                            readOnly
+                            value={formData.adminEmail}
+                            className="w-full px-3 py-2 rounded-lg border border-warm bg-sand/20 text-stone-500 text-sm focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-warm-muted uppercase tracking-wider block mb-1">
+                            6-Digit OTP Code
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={6}
+                            value={otp}
+                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                            placeholder="Enter 6-digit OTP"
+                            className="w-full px-3 py-2.5 rounded-lg border border-warm focus:border-primary bg-surface text-center font-bold text-lg tracking-[0.5em] outline-none transition"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (otp.length !== 6 || !/^\d+$/.test(otp)) {
+                              setErrorMsg("Please enter a valid 6-digit OTP.");
+                              return;
+                            }
+                            setIsVerifyingOtp(true);
+                            setErrorMsg(null);
+                            try {
+                              await api.registerVerifyOTP(formData.adminEmail, otp);
+                              setOtpVerified(true);
+                              toast.success("Admin email verified successfully!");
+                            } catch (err: any) {
+                              setErrorMsg(err.message || "Invalid OTP. Please try again.");
+                            } finally {
+                              setIsVerifyingOtp(false);
+                            }
+                          }}
+                          disabled={isVerifyingOtp}
+                          className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark shadow transition flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {isVerifyingOtp ? "Verifying..." : "Verify & Activate Account"}
+                        </button>
+
+                        <div className="text-center">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setErrorMsg(null);
+                              try {
+                                await api.registerSendOTP(formData.adminEmail);
+                                toast.success("A new 6-digit OTP code has been sent.");
+                              } catch (err: any) {
+                                setErrorMsg(err.message || "Failed to resend OTP.");
+                              }
+                            }}
+                            className="text-xs font-semibold text-primary hover:underline"
+                          >
+                            Resend OTP
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {step === 4 && otpVerified && (
+                    <StepSuccess
+                      formData={formData}
                       createdCommunity={createdCommunityInfo}
                       onFinish={() => {
                         sessionStorage.removeItem("wag_registered_community");
@@ -505,7 +663,7 @@ function CommReg() {
 
               {/* Error Message */}
               {errorMsg && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-sm font-medium"
@@ -553,7 +711,13 @@ function CommReg() {
 // ==========================================
 // STEP 1: BASIC INFORMATION
 // ==========================================
-function StepInfo({ formData, updateField, setShowParentModal }: { formData: any; updateField: any; setShowParentModal: (open: boolean) => void }) {
+function StepInfo({ formData, updateField, setShowParentModal, logoFileRef, coverFileRef }: {
+  formData: any;
+  updateField: any;
+  setShowParentModal: (open: boolean) => void;
+  logoFileRef: React.MutableRefObject<File | null>;
+  coverFileRef: React.MutableRefObject<File | null>;
+}) {
   return (
     <div className="space-y-6">
       <div className="border-b border-warm pb-4">
@@ -585,11 +749,10 @@ function StepInfo({ formData, updateField, setShowParentModal }: { formData: any
                 updateField("parentName", "");
                 updateField("parentHierarchy", "");
               }}
-              className={`p-4 rounded-xl border-2 text-left transition flex flex-col justify-between ${
-                formData.type === "Super"
-                  ? "border-primary bg-primary/5 text-foreground"
-                  : "border-warm bg-surface hover:bg-sand/30"
-              }`}
+              className={`p-4 rounded-xl border-2 text-left transition flex flex-col justify-between ${formData.type === "Super"
+                ? "border-primary bg-primary/5 text-foreground"
+                : "border-warm bg-surface hover:bg-sand/30"
+                }`}
             >
               <div className="flex justify-between items-center w-full">
                 <Building2 className={`w-5 h-5 ${formData.type === "Super" ? "text-primary" : "text-warm-muted"}`} />
@@ -606,11 +769,10 @@ function StepInfo({ formData, updateField, setShowParentModal }: { formData: any
             <button
               type="button"
               onClick={() => setShowParentModal(true)}
-              className={`p-4 rounded-xl border-2 text-left transition flex flex-col justify-between ${
-                formData.type === "Subsidiary"
-                  ? "border-primary bg-primary/5 text-foreground"
-                  : "border-warm bg-surface hover:bg-sand/30"
-              }`}
+              className={`p-4 rounded-xl border-2 text-left transition flex flex-col justify-between ${formData.type === "Subsidiary"
+                ? "border-primary bg-primary/5 text-foreground"
+                : "border-warm bg-surface hover:bg-sand/30"
+                }`}
             >
               <div className="flex justify-between items-center w-full">
                 <Activity className={`w-5 h-5 ${formData.type === "Subsidiary" ? "text-primary" : "text-warm-muted"}`} />
@@ -796,7 +958,10 @@ function StepInfo({ formData, updateField, setShowParentModal }: { formData: any
                   accept="image/*"
                   onChange={e => {
                     const file = e.target.files?.[0];
-                    if (file) updateField("logo", URL.createObjectURL(file));
+                    if (file) {
+                      logoFileRef.current = file;               // store actual File
+                      updateField("logo", URL.createObjectURL(file)); // preview only
+                    }
                   }}
                 />
               </label>
@@ -826,7 +991,10 @@ function StepInfo({ formData, updateField, setShowParentModal }: { formData: any
                   accept="image/*"
                   onChange={e => {
                     const file = e.target.files?.[0];
-                    if (file) updateField("cover", URL.createObjectURL(file));
+                    if (file) {
+                      coverFileRef.current = file;               // store actual File
+                      updateField("cover", URL.createObjectURL(file)); // preview only
+                    }
                   }}
                 />
               </label>
@@ -888,16 +1056,15 @@ function StepHierarchy({ formData, updateField }: { formData: any; updateField: 
   useEffect(() => {
     api.getCommunities().then(res => {
       if (res && res.length > 0) {
-        // Filter: Only Approved Super Communities should appear in Parent Community selection
-        const approvedSupers = res.filter((c: any) => 
-          (c.type === "Super" || c.type === "Super Community") && 
-          (c.status === "Approved" || c.status === "Active")
+        // Filter: Only Approved/Active Communities should appear in Parent Community selection
+        const approvedSupers = res.filter((c: any) =>
+          c.status === "Approved" || c.status === "Active"
         );
         const formatted = approvedSupers.map((c: any) => ({
           id: c.id.toString(),
           name: c.name,
           state: c.state,
-          hierarchy: `${c.state} → ${c.taluka || c.district} → ${c.type} Samaj`
+          hierarchy: c.path ? c.path.join(' → ') : c.name
         }));
         setAllCommunities(formatted);
       } else {
@@ -914,7 +1081,7 @@ function StepHierarchy({ formData, updateField }: { formData: any; updateField: 
       setSearchResults([]);
       return;
     }
-    const filtered = allCommunities.filter(p => 
+    const filtered = allCommunities.filter(p =>
       p.name.toLowerCase().includes(q.toLowerCase())
     );
     setSearchResults(filtered);
@@ -938,7 +1105,7 @@ function StepHierarchy({ formData, updateField }: { formData: any; updateField: 
         </div>
 
         {formData.type === "Super" ? (
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.98, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="p-5 rounded-xl bg-gold-light border border-amber-200 flex items-start gap-3"
@@ -985,7 +1152,7 @@ function StepHierarchy({ formData, updateField }: { formData: any; updateField: 
             </div>
 
             {formData.parentId ? (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="p-4 rounded-xl bg-teal/5 border border-teal/20"
@@ -1065,14 +1232,62 @@ function StepHierarchy({ formData, updateField }: { formData: any; updateField: 
           </div>
           <div>
             <label className="text-xs font-medium text-warm-muted block mb-1">Admin Password *</label>
-            <input
-              type="password"
-              name="adminPass"
-              placeholder="Create secure password"
-              value={formData.adminPass}
-              onChange={e => updateField("adminPass", e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm outline-none focus:border-primary"
-            />
+            <div className="relative">
+              <input
+                type={showAdminPass ? "text" : "password"}
+                name="adminPass"
+                placeholder="Create secure password"
+                value={formData.adminPass}
+                onChange={e => updateField("adminPass", e.target.value)}
+                className="w-full pl-3 pr-10 py-2 rounded-lg border border-warm bg-surface text-sm outline-none focus:border-primary"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-2.5 text-warm-muted hover:text-primary transition-colors"
+                onClick={() => setShowAdminPass(!showAdminPass)}
+              >
+                {showAdminPass ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {formData.adminPass && (() => {
+              const getPasswordStrength = (pwd: string) => {
+                if (!pwd) return { score: 0, label: "", color: "bg-stone-200", text: "text-stone-500" };
+                let score = 0;
+                if (pwd.length >= 8) score++;
+                if (/[A-Z]/.test(pwd)) score++;
+                if (/[a-z]/.test(pwd)) score++;
+                if (/\d/.test(pwd)) score++;
+                if (/[@$!%*?&]/.test(pwd)) score++;
+
+                if (score <= 2) return { score, label: "Weak", color: "bg-red-500", text: "text-red-500" };
+                if (score <= 4) return { score, label: "Medium", color: "bg-amber-500", text: "text-amber-500" };
+                return { score, label: "Strong", color: "bg-green-500", text: "text-green-500" };
+              };
+              const strObj = getPasswordStrength(formData.adminPass);
+              return (
+                <div className="mt-2">
+                  <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider mb-1">
+                    <span className="text-warm-muted">Password Strength</span>
+                    <span className={strObj.text}>{strObj.label}</span>
+                  </div>
+                  <div className="h-1 w-full bg-stone-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${strObj.color}`}
+                      style={{ width: `${(strObj.score / 5) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1095,16 +1310,14 @@ function StepHierarchy({ formData, updateField }: { formData: any; updateField: 
               key={p.id}
               type="button"
               onClick={() => updateField("plan", p.id)}
-              className={`p-4 rounded-xl border-2 text-left flex flex-col justify-between transition ${
-                formData.plan === p.id 
-                  ? "border-primary bg-primary/5 shadow-warm" 
-                  : "border-warm bg-surface hover:bg-sand/30"
-              }`}
+              className={`p-4 rounded-xl border-2 text-left flex flex-col justify-between transition ${formData.plan === p.id
+                ? "border-primary bg-primary/5 shadow-warm"
+                : "border-warm bg-surface hover:bg-sand/30"
+                }`}
             >
               <div>
-                <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
-                  formData.plan === p.id ? "bg-primary/20 text-primary" : "bg-sand text-warm-muted"
-                }`}>
+                <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${formData.plan === p.id ? "bg-primary/20 text-primary" : "bg-sand text-warm-muted"
+                  }`}>
                   {p.id}
                 </span>
                 <div className="font-display text-2xl font-bold text-foreground mt-3">{p.price}</div>
@@ -1132,9 +1345,9 @@ function StepCommittee({ committee, setCommittee }: { committee: CommitteeMember
     email: "",
     avatar: ""
   });
-  
-  const [avatarPreview, setAvatarPreview] = useState<string|null>(null);
-  const [error, setError] = useState<string|null>(null);
+
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const addMember = () => {
     setError(null);
@@ -1177,13 +1390,13 @@ function StepCommittee({ committee, setCommittee }: { committee: CommitteeMember
       {/* Member Builder Input Block */}
       <div className="bg-sand/30 p-5 rounded-xl border border-warm space-y-4">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-warm-muted">New Member Form</h3>
-        
+
         {error && (
           <div className="text-xs text-red-600 font-medium bg-red-50 border border-red-200 p-2.5 rounded-lg">
             {error}
           </div>
         )}
-        
+
         <div className="grid sm:grid-cols-3 gap-4">
           <div className="sm:col-span-2">
             <label className="text-xs font-medium text-warm-muted block mb-1">Full Name</label>
@@ -1260,7 +1473,7 @@ function StepCommittee({ committee, setCommittee }: { committee: CommitteeMember
       {/* Preview Grid */}
       <div>
         <h3 className="font-ui font-semibold text-sm text-foreground mb-3">Committee Board ({committee.length})</h3>
-        
+
         {committee.length === 0 ? (
           <div className="p-8 text-center border-2 border-dashed border-warm rounded-xl text-warm-muted text-sm">
             No committee members added yet. Add officers above to populate the board.
@@ -1321,7 +1534,7 @@ function StepReview({ formData, committee, updateField }: { formData: any; commi
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
-        
+
         {/* Document Upload */}
         <div className="md:col-span-1 space-y-4">
           <div className="bg-sand/30 p-5 rounded-xl border border-warm">
@@ -1331,7 +1544,7 @@ function StepReview({ formData, committee, updateField }: { formData: any; commi
             <p className="text-xs text-warm-muted mb-4 leading-relaxed">
               Upload a copy of your Trust Deed, registration certificate, or a formal letter on letterhead signed by the President to expedite validation.
             </p>
-            
+
             <label className="cursor-pointer block">
               <div className="p-4 bg-surface hover:bg-sand/40 border-2 border-dashed border-warm rounded-lg flex flex-col items-center justify-center text-center transition">
                 <Upload className="w-6 h-6 text-warm-muted mb-2" />
@@ -1373,7 +1586,7 @@ function StepReview({ formData, committee, updateField }: { formData: any; commi
               <span className="font-ui font-semibold text-sm">Application Summary</span>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary">{formData.plan} Plan</span>
             </div>
-            
+
             <div className="p-5 space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-y-3 gap-x-4">
                 <div>
@@ -1423,11 +1636,11 @@ function StepReview({ formData, committee, updateField }: { formData: any; commi
           {/* Agreements */}
           <div className="space-y-3">
             <label className="flex items-start gap-2.5 text-xs text-warm-muted leading-relaxed cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={agreed} 
-                onChange={e => setAgreed(e.target.checked)} 
-                className="mt-0.5 rounded border-warm text-primary focus:ring-primary" 
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={e => setAgreed(e.target.checked)}
+                className="mt-0.5 rounded border-warm text-primary focus:ring-primary"
               />
               <span>
                 I hereby declare that I am an authorized office bearer of <strong>{formData.name || "this samaj"}</strong>, and all submitted documents and registrations details are authentic and true.
@@ -1487,11 +1700,11 @@ function StepSuccess({ formData, createdCommunity, onFinish }: { formData: any; 
   });
 
   if (isSubsidiary) {
-    const isApprovedByParent = currentCommunity?.status === "Approved" || 
-                              currentCommunity?.status === "Active" || 
-                              currentCommunity?.status === "Pending Super Admin Approval";
+    const isApprovedByParent = currentCommunity?.status === "Approved" ||
+      currentCommunity?.status === "Active" ||
+      currentCommunity?.status === "Pending Super Admin Approval";
     const isRejectedByParent = currentCommunity?.status === "Rejected By Parent Community Admin";
-    
+
     let parentStatus = "pending";
     let parentDesc = `Awaiting hierarchy validation and approval from ${parentName}.`;
     if (isApprovedByParent) {
@@ -1514,10 +1727,10 @@ function StepSuccess({ formData, createdCommunity, onFinish }: { formData: any; 
 
   const isSuperApproved = currentCommunity?.status === "Approved" || currentCommunity?.status === "Active";
   const isSuperRejected = currentCommunity?.status === "Rejected By Super Admin";
-  
+
   let superStatus = "pending";
   let superDesc = "Awaiting final platform administration verification.";
-  
+
   if (isSuperApproved) {
     superStatus = "completed";
     superDesc = "Platform credentials generated. Account activated.";
@@ -1539,8 +1752,8 @@ function StepSuccess({ formData, createdCommunity, onFinish }: { formData: any; 
   const activeStatus = isSuperApproved ? "completed" : "pending";
   timelineNodes.push({
     title: "Community Workspace Live",
-    desc: isSuperApproved 
-      ? "Login enabled for Samaj Admins. Portal workspace activated." 
+    desc: isSuperApproved
+      ? "Login enabled for Samaj Admins. Portal workspace activated."
       : "Community admin portal remains locked until verification finishes.",
     status: activeStatus,
     date: isSuperApproved ? "Active" : "Locked"
@@ -1549,7 +1762,7 @@ function StepSuccess({ formData, createdCommunity, onFinish }: { formData: any; 
   return (
     <div className="text-center py-10 max-w-xl mx-auto space-y-6">
       <div className="flex justify-center">
-        <motion.div 
+        <motion.div
           initial={{ scale: 0, rotate: -45 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: "spring", stiffness: 100, damping: 10 }}
@@ -1570,8 +1783,8 @@ function StepSuccess({ formData, createdCommunity, onFinish }: { formData: any; 
           {currentCommunity?.status === "Approved" || currentCommunity?.status === "Active"
             ? "Workspace Activated!"
             : currentCommunity?.status?.startsWith("Rejected")
-            ? "Registration Rejected"
-            : "Review In Progress"}
+              ? "Registration Rejected"
+              : "Review In Progress"}
         </h2>
         <p className="text-sm text-warm-muted">
           Current status: <span className="font-semibold text-primary">{currentCommunity?.status || "Pending"}</span>
@@ -1589,25 +1802,23 @@ function StepSuccess({ formData, createdCommunity, onFinish }: { formData: any; 
             {refreshing ? "Refreshing..." : "Refresh Status"}
           </button>
         </div>
-        
+
         <div className="space-y-4">
           {timelineNodes.map((t, i) => (
             <div key={i} className="flex gap-4 relative">
               {i < timelineNodes.length - 1 && (
-                <div className={`absolute left-3 top-6 bottom-0 w-[2px] ${
-                  t.status === "completed" ? "bg-teal" : "bg-border"
-                }`} />
+                <div className={`absolute left-3 top-6 bottom-0 w-[2px] ${t.status === "completed" ? "bg-teal" : "bg-border"
+                  }`} />
               )}
 
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 ${
-                t.status === "completed" 
-                  ? "bg-teal text-white" 
-                  : t.status === "current" 
-                    ? "bg-primary/20 text-primary border border-primary animate-pulse" 
-                    : t.status === "rejected"
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 ${t.status === "completed"
+                ? "bg-teal text-white"
+                : t.status === "current"
+                  ? "bg-primary/20 text-primary border border-primary animate-pulse"
+                  : t.status === "rejected"
                     ? "bg-red-500 text-white"
                     : "bg-surface text-warm-muted border border-warm"
-              }`}>
+                }`}>
                 {t.status === "completed" ? <Check className="w-3.5 h-3.5" /> : t.status === "rejected" ? <X className="w-3.5 h-3.5" /> : i + 1}
               </div>
 
@@ -1663,10 +1874,9 @@ function ParentCommunityModal({
       api.getCommunities()
         .then(res => {
           if (res) {
-            // Filter: Only Approved Super Communities, Active Super Communities
-            const filtered = res.filter((c: any) => 
-              (c.type === "Super" || c.type === "Super Community") && 
-              (c.status === "Approved" || c.status === "Active")
+            // Filter: Only Approved/Active Communities, regardless of type
+            const filtered = res.filter((c: any) =>
+              c.status === "Approved" || c.status === "Active"
             );
             setCommunities(filtered);
           }
@@ -1679,31 +1889,34 @@ function ParentCommunityModal({
   const selectedParent = communities.find(c => c.id.toString() === selectedParentId);
 
   // Search filter
-  const filteredCommunities = communities.filter(c => 
+  const filteredCommunities = communities.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     (c.registration_no && c.registration_no.toLowerCase().includes(search.toLowerCase())) ||
-    `${c.village} ${c.district} ${c.state}`.toLowerCase().includes(search.toLowerCase())
+    `${c.village} ${c.district} ${c.state}`.toLowerCase().includes(search.toLowerCase()) ||
+    (c.path && c.path.join(' → ').toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
     <Modal open={open} onClose={onCancel} title="Select Parent Community" size="md">
       <div className="space-y-5 text-sm">
         <p className="text-warm-muted text-xs leading-relaxed">
-          This community will be registered under an existing Super Community and will require approval from both Super Admin and the selected Parent Community Admin.
+          This community will be registered under an existing community and will require approval from both the Super Admin and the selected Parent Community Admin.
         </p>
 
         {/* Searchable Dropdown */}
         <div className="relative">
-          <label className="text-xs font-semibold text-warm-muted block mb-1">Parent Super Community *</label>
-          <div 
+          <label className="text-xs font-semibold text-warm-muted block mb-1">Parent Community *</label>
+          <div
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="w-full px-3 py-2.5 rounded-xl border border-warm bg-surface flex items-center justify-between cursor-pointer focus-within:border-primary hover:border-primary-dark transition"
           >
             {selectedParent ? (
               <div className="flex flex-col">
-                <span className="font-semibold text-foreground">{selectedParent.name}</span>
+                <span className="font-semibold text-foreground">
+                  {selectedParent.path ? selectedParent.path.join(' → ') : selectedParent.name}
+                </span>
                 <span className="text-[10px] text-warm-muted">
-                  Code: {selectedParent.registration_no || `COMM-${selectedParent.id}`} · {selectedParent.village || selectedParent.district}, {selectedParent.state}
+                  Type: {selectedParent.type} · Code: {selectedParent.registration_no || `COMM-${selectedParent.id}`} · {selectedParent.village || selectedParent.district}, {selectedParent.state}
                 </span>
               </div>
             ) : (
@@ -1718,7 +1931,7 @@ function ParentCommunityModal({
                 <Search className="w-4 h-4 text-warm-muted mr-2" />
                 <input
                   type="text"
-                  placeholder="Type community name, registration number, or location..."
+                  placeholder="Type community name, hierarchy path, or location..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   onClick={e => e.stopPropagation()}
@@ -1743,9 +1956,11 @@ function ParentCommunityModal({
                       className={`w-full text-left px-4 py-2.5 hover:bg-sand/30 border-b border-warm last:border-0 text-xs flex justify-between items-center transition ${c.id.toString() === selectedParentId ? 'bg-primary/5 font-semibold' : ''}`}
                     >
                       <div className="flex-1 min-w-0 pr-4">
-                        <div className="text-foreground truncate">{c.name}</div>
+                        <div className="text-foreground font-semibold truncate">
+                          {c.path ? c.path.join(' → ') : c.name}
+                        </div>
                         <div className="text-[10px] text-warm-muted truncate mt-0.5">
-                          Code: {c.registration_no || `COMM-${c.id}`} · {c.village || c.district}, {c.state}
+                          Type: {c.type} · Code: {c.registration_no || `COMM-${c.id}`} · {c.village || c.district}, {c.state}
                         </div>
                       </div>
                       {c.id.toString() === selectedParentId && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
@@ -1759,7 +1974,7 @@ function ParentCommunityModal({
 
         {/* Parent Community Information Preview */}
         {selectedParent && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             className="p-4 rounded-xl bg-sand/30 border border-warm space-y-3"
@@ -1794,7 +2009,10 @@ function ParentCommunityModal({
           <button
             type="button"
             disabled={!selectedParentId}
-            onClick={() => onContinue(selectedParent)}
+            onClick={() => onContinue({
+              ...selectedParent,
+              hierarchy: selectedParent.path ? selectedParent.path.join(' → ') : selectedParent.name
+            })}
             className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl transition disabled:opacity-50"
           >
             Continue

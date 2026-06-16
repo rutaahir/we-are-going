@@ -9,9 +9,12 @@ export const Route = createFileRoute("/admin")({
   component: Layout,
 });
 
+import { Network } from "lucide-react";
+
 const ITEMS: SidebarItem[] = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/communities", label: "Communities", icon: Building2 },
+  { to: "/admin/community-hierarchy", label: "Hierarchy", icon: Network },
   { to: "/admin/members", label: "Members", icon: Users },
   { to: "/admin/committee", label: "Committee", icon: UserCog },
   { to: "/admin/events", label: "Events", icon: Calendar },
@@ -29,16 +32,21 @@ const ITEMS: SidebarItem[] = [
 function Layout() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  useEffect(() => { if (!user) navigate({ to: "/login" }); }, [user, navigate]);
-  if (!user) return null;
+  useEffect(() => { 
+    if (!user) {
+      navigate({ to: "/login" }); 
+    } else if (user.role !== "super_admin") {
+      navigate({ to: user.role === "community_admin" ? "/community-admin" : "/dashboard" });
+    }
+  }, [user, navigate]);
+  if (!user || user.role !== "super_admin") return null;
   return (
     <div className="flex flex-col min-h-screen bg-transparent w-full">
-      <MobileHeader title="Super Admin" />
+      <MobileHeader title="Super Admin" items={ITEMS} />
       <div className="flex flex-1 w-full">
         <DashboardSidebar items={ITEMS} title="Super Admin" />
-        <div className="flex-1 min-w-0 pb-20 md:pb-0"><Outlet /></div>
+        <div className="flex-1 min-w-0 pb-6 md:pb-0"><Outlet /></div>
       </div>
-      <MobileBottomNav items={ITEMS} />
     </div>
   );
 }

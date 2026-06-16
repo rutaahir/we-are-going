@@ -1,7 +1,23 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 
 export type Role = "member" | "community_admin" | "super_admin";
 export type Plan = "Free" | "Basic" | "Pro" | "Enterprise";
+
+export const ALL_PERMISSIONS = [
+  "View Members", "Add Members", "Edit Members", "Delete Members", "Approve Members",
+  "View Committee", "Add Committee Members", "Edit Committee Members", "Remove Committee Members",
+  "View Families", "Add Families", "Edit Families", "Delete Families",
+  "View Events", "Create Events", "Edit Events", "Delete Events",
+  "View News", "Create News", "Edit News", "Delete News",
+  "View Gallery", "Upload Photos", "Edit Photos", "Delete Photos",
+  "View Donations", "Manage Donations",
+  "View Jobs", "Create Jobs", "Edit Jobs", "Delete Jobs",
+  "View Businesses", "Add Businesses", "Edit Businesses", "Delete Businesses",
+  "View Profiles", "Approve Profiles", "Manage Matches", "Manage Interests",
+  "View Reports", "Export Reports",
+  "Edit Community Profile", "Manage Logo", "Manage Banner", "Manage Community Information",
+  "View Hierarchy", "Manage Subsidiaries"
+];
 
 export interface User {
   id: string;
@@ -11,14 +27,25 @@ export interface User {
   avatar: string;
   communityName: string;
   communityId?: string | number;
+  communityLogo?: string;
+  communityCover?: string;
+  communityType?: string;
+  parentCommunityName?: string;
+  parentCommunityType?: string;
+  parentCommunityId?: string | number;
+  gender?: string;
   plan: Plan;
   planExpiry: string;
+  permissions?: string[];
+  effectivePermissions?: string[];
+  customRoleName?: string;
 }
 
 import { api } from "@/lib/api";
 
 interface AuthCtx {
   user: User | null;
+  effectivePermissions: string[];
   login: (u: User) => void;
   loginWithApi: (username: string, password: string) => Promise<User>;
   logout: () => void;
@@ -27,6 +54,7 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx>({ 
   user: null, 
+  effectivePermissions: [],
   login: () => {}, 
   loginWithApi: async () => { throw new Error("Not implemented"); }, 
   logout: () => {},
@@ -66,12 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   });
   
-  const login = (u: User) => { 
+  const login = useCallback((u: User) => { 
     localStorage.setItem(STORAGE, JSON.stringify(u)); 
     setUser(u); 
-  };
+  }, []);
 
-  const loginWithApi = async (username: string, password_raw: string): Promise<User> => {
+  const loginWithApi = useCallback(async (username: string, password_raw: string): Promise<User> => {
     const apiUser = await api.login(username, password_raw);
     const mappedUser: User = {
       id: String(apiUser.id),
@@ -81,15 +109,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       avatar: apiUser.avatar,
       communityName: apiUser.communityName,
       communityId: apiUser.communityId,
+      communityLogo: apiUser.communityLogo,
+      communityCover: apiUser.communityCover,
+      communityType: apiUser.communityType,
+      parentCommunityName: apiUser.parentCommunityName,
+      parentCommunityType: apiUser.parentCommunityType,
+      parentCommunityId: apiUser.parentCommunityId,
+      gender: apiUser.gender,
       plan: apiUser.plan as Plan,
       planExpiry: apiUser.planExpiry || "2027-12-31",
+      permissions: apiUser.permissions || [],
+      effectivePermissions: apiUser.permissions || [],
+      customRoleName: apiUser.customRoleName,
     };
     localStorage.setItem(STORAGE, JSON.stringify(mappedUser));
     setUser(mappedUser);
     return mappedUser;
-  };
+  }, []);
   
-  const refreshUser = async (): Promise<User | null> => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     try {
       const apiUser = await api.getCurrentUser();
       if (!apiUser) return null;
@@ -101,8 +139,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         avatar: apiUser.avatar,
         communityName: apiUser.communityName,
         communityId: apiUser.communityId,
+        communityLogo: apiUser.communityLogo,
+        communityCover: apiUser.communityCover,
+        communityType: apiUser.communityType,
+        parentCommunityName: apiUser.parentCommunityName,
+        parentCommunityType: apiUser.parentCommunityType,
+        parentCommunityId: apiUser.parentCommunityId,
+        gender: apiUser.gender,
         plan: apiUser.plan as Plan,
         planExpiry: apiUser.planExpiry || "2027-12-31",
+        permissions: apiUser.permissions || [],
+        effectivePermissions: apiUser.permissions || [],
+        customRoleName: apiUser.customRoleName,
       };
       localStorage.setItem(STORAGE, JSON.stringify(mappedUser));
       setUser(mappedUser);
@@ -111,16 +159,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Failed to refresh user", e);
       return null;
     }
-  };
+  }, []);
   
-  const logout = () => { 
+  const logout = useCallback(() => { 
     localStorage.removeItem(STORAGE); 
     localStorage.removeItem("wag_token");
     localStorage.removeItem("wag_refresh");
     setUser(null); 
-  };
+  }, []);
+
+  const effectivePermissions = (() => {
+    if (!user) return [];
+    if (user.role === "super_admin") return ALL_PERMISSIONS;
+    if (user.role === "community_admin" && !user.customRoleName) return ALL_PERMISSIONS;
+    return user.permissions || [];
+  })();
   
-  return <Ctx.Provider value={{ user, login, loginWithApi, logout, refreshUser }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, effectivePermissions, login, loginWithApi, logout, refreshUser }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

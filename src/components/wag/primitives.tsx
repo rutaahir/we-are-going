@@ -4,7 +4,7 @@ import { useRef, useState, useEffect, type ReactNode, type CSSProperties } from 
 import { cn } from "@/lib/utils";
 
 /* ---------- AnimatedCard: Clean Premium hover lift + soft glow ---------- */
-export function AnimatedCard({ children, className, style }: { children: ReactNode; className?: string; style?: CSSProperties; intensity?: number }) {
+export function AnimatedCard({ children, className, style, onClick }: { children: ReactNode; className?: string; style?: CSSProperties; intensity?: number; onClick?: (e: React.MouseEvent) => void }) {
   return (
     <motion.div
       whileHover={{ 
@@ -14,6 +14,7 @@ export function AnimatedCard({ children, className, style }: { children: ReactNo
       }}
       transition={{ type: "spring", stiffness: 400, damping: 28 }}
       style={style}
+      onClick={onClick}
       className={cn("relative rounded-2xl bg-surface border border-warm shadow-warm overflow-hidden", className)}
     >
       {children}
@@ -36,12 +37,15 @@ export function PageTransition({ children }: { children: ReactNode }) {
 }
 
 /* ---------- StatCard with counter ---------- */
-export function StatCard({ icon, label, value, suffix = "", accent = "primary" }: { icon: ReactNode; label: string; value: number; suffix?: string; accent?: "primary" | "gold" | "teal" }) {
+export function StatCard({ icon, label, value, suffix = "", accent = "primary" }: { icon: ReactNode; label: string; value: number | string; suffix?: string; accent?: "primary" | "gold" | "teal" }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.3 });
-  const [n, setN] = useState(0);
+  const [n, setN] = useState<number | string>(typeof value === 'number' ? 0 : value);
   useEffect(() => {
-    if (!inView) return;
+    if (!inView || typeof value !== 'number') {
+      setN(value);
+      return;
+    }
     const dur = 2000; const start = performance.now();
     let raf = 0;
     const tick = (t: number) => {
@@ -49,6 +53,7 @@ export function StatCard({ icon, label, value, suffix = "", accent = "primary" }
       const e = 1 - Math.pow(1 - p, 3);
       setN(Math.floor(value * e));
       if (p < 1) raf = requestAnimationFrame(tick);
+      else setN(value);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -58,9 +63,11 @@ export function StatCard({ icon, label, value, suffix = "", accent = "primary" }
   return (
     <AnimatedCard className={cn("p-6 border-t-4", borderMap)}>
       <div ref={ref} className="flex items-start gap-4">
-        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", accentMap)}>{icon}</div>
-        <div>
-          <div className="text-3xl font-bold font-ui">{n.toLocaleString("en-IN")}{suffix}</div>
+        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0", accentMap)}>{icon}</div>
+        <div className="min-w-0 flex-1">
+          <div className={`font-bold font-ui truncate ${typeof value === 'string' && value.length > 10 ? 'text-xl' : 'text-3xl'}`}>
+            {typeof n === 'number' ? n.toLocaleString("en-IN") : n}{suffix}
+          </div>
           <div className="text-sm text-warm-muted mt-1">{label}</div>
         </div>
       </div>
@@ -71,9 +78,9 @@ export function StatCard({ icon, label, value, suffix = "", accent = "primary" }
 /* ---------- StatusBadge ---------- */
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    Verified: "bg-teal/15 text-teal", Active: "bg-emerald-100 text-emerald-700",
+    Verified: "bg-teal/15 text-teal", Active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
     Pending: "bg-amber-100 text-amber-700", Rejected: "bg-red-100 text-red-700",
-    Suspended: "bg-gray-200 text-gray-700", Approved: "bg-teal/15 text-teal",
+    Suspended: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300", Approved: "bg-teal/15 text-teal",
     Featured: "bg-gold-light text-gold", Completed: "bg-blue-100 text-blue-700",
     Upcoming: "bg-indigo-100 text-indigo-700", Ongoing: "bg-emerald-100 text-emerald-700",
     Open: "bg-emerald-100 text-emerald-700", Closed: "bg-gray-200 text-gray-700",
@@ -81,6 +88,9 @@ export function StatusBadge({ status }: { status: string }) {
     Refunded: "bg-amber-100 text-amber-700", Expired: "bg-gray-200 text-gray-700",
     Scheduled: "bg-blue-100 text-blue-700", Empty: "bg-gray-100 text-gray-500",
     Trial: "bg-violet-100 text-violet-700", Cancelled: "bg-red-100 text-red-700",
+    Draft: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+    "Ready For Review": "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+    Hidden: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
   };
   return <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium", map[status] || "bg-gray-100 text-gray-700")}>{status}</span>;
 }
@@ -97,11 +107,13 @@ export function PlanBadge({ plan }: { plan: string }) {
 }
 
 /* ---------- AvatarCircle ---------- */
+import { getImageUrl } from "@/lib/api";
+
 export function AvatarCircle({ name, src, size = 40 }: { name: string; src?: string; size?: number }) {
   const colors = ["bg-blue-500", "bg-emerald-500", "bg-rose-500", "bg-violet-500", "bg-amber-500", "bg-teal-500", "bg-indigo-500"];
   const hash = name.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-  if (src) return <img src={src} alt={name} loading="lazy" style={{ width: size, height: size }} className="rounded-full object-cover border-2 border-warm shadow-sm" />;
+  if (src) return <img src={getImageUrl(src)} alt={name} loading="lazy" style={{ width: size, height: size }} className="rounded-full object-cover border-2 border-warm shadow-sm" />;
   return <div style={{ width: size, height: size, fontSize: size * 0.4 }} className={cn("rounded-full flex items-center justify-center text-white font-semibold", colors[hash % colors.length])}>{initials}</div>;
 }
 
@@ -160,13 +172,13 @@ export function Reveal({ children, delay = 0, className }: { children: ReactNode
 }
 
 /* ---------- DetailDrawer ---------- */
-export function DetailDrawer({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+export function DetailDrawer({ open, onClose, children, title, size = "md" }: { open: boolean; onClose: () => void; children: ReactNode; title?: string; size?: "md" | "lg" }) {
   return (
     <AnimatePresence>
       {open && (
         <>
           <motion.div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-          <motion.div className="fixed right-0 top-0 bottom-0 w-full sm:w-[480px] bg-surface z-50 shadow-2xl overflow-y-auto"
+          <motion.div className={cn("fixed right-0 top-0 bottom-0 w-full bg-surface z-50 shadow-2xl overflow-y-auto", size === "lg" ? "sm:w-[720px]" : "sm:w-[480px]")}
             initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
             <div className="sticky top-0 bg-surface/95 backdrop-blur border-b border-warm px-6 py-4 flex items-center justify-between z-10">
               <h3 className="font-ui font-semibold">{title}</h3>
@@ -181,12 +193,18 @@ export function DetailDrawer({ open, onClose, children, title }: { open: boolean
 }
 
 /* ---------- ConfirmModal ---------- */
-export function Modal({ open, onClose, children, title, size = "md" }: { open: boolean; onClose: () => void; children: ReactNode; title?: string; size?: "sm" | "md" | "lg" | "xl" }) {
+export function Modal({ open, onClose, children, title, size = "md", closeOnOverlayClick = true }: { open: boolean; onClose: () => void; children: ReactNode; title?: string; size?: "sm" | "md" | "lg" | "xl"; closeOnOverlayClick?: boolean }) {
   const sizeMap = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-2xl", xl: "max-w-4xl" };
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+        <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={(e: React.MouseEvent) => {
+          if (closeOnOverlayClick) {
+            onClose();
+          } else {
+            e.stopPropagation();
+          }
+        }}>
           <motion.div className={cn("bg-surface rounded-t-2xl sm:rounded-2xl shadow-2xl w-full overflow-hidden max-h-[90vh] sm:max-h-[85vh] flex flex-col", sizeMap[size])} initial={{ scale: 0.88, opacity: 0, y: 40 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.88, opacity: 0, y: 40 }} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
             {title && <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-warm flex items-center justify-between shrink-0"><h3 className="font-ui font-semibold text-sm sm:text-base truncate pr-2">{title}</h3><button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-sand flex items-center justify-center shrink-0">✕</button></div>}
             <div className="p-3 sm:p-6 overflow-y-auto flex-1">{children}</div>
