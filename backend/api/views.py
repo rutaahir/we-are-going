@@ -7,6 +7,9 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.conf import settings
 from django.db.models import Q
+from django.http import HttpResponse
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
 import datetime
 import logging
 import random
@@ -114,6 +117,209 @@ from .serializers import (
     WishlistSerializer, ProfileViewSerializer, MatrimonyPhotoSerializer, MatrimonyAuditLogSerializer,
     JobApplicationSerializer
 )
+
+BOOKING_ACTIVE_STATUSES = ['Pending Approval', 'Pending Payment', 'Confirmed', 'Checked In', 'Refund Requested']
+
+def _money(value):
+    return Decimal(str(value or 0)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+def _booking_window(start_date, end_date, start_time, end_time):
+    return (
+        datetime.datetime.combine(start_date, start_time),
+        datetime.datetime.combine(end_date, end_time),
+    )
+
+def _parse_booking_request(data):
+    start_date = datetime.datetime.strptime(data.get('start_date'), '%Y-%m-%d').date()
+    end_date = datetime.datetime.strptime(data.get('end_date') or data.get('start_date'), '%Y-%m-%d').date()
+    start_time = datetime.datetime.strptime((data.get('start_time') or '00:00')[:5], '%H:%M').time()
+    end_time = datetime.datetime.strptime((data.get('end_time') or '23:59')[:5], '%H:%M').time()
+    if end_date < start_date:
+        raise ValueError('End date cannot be before start date.')
+    start_dt, end_dt = _booking_window(start_date, end_date, start_time, end_time)
+    if end_dt <= start_dt:
+        raise ValueError('End time must be after start time.')
+    return start_date, end_date, start_time, end_time, start_dt, end_dt
+
+def _minutes_to_label(minutes):
+    hours = minutes // 60
+    mins = minutes % 60
+    suffix = 'AM' if hours < 12 else 'PM'
+    display_hour = hours % 12 or 12
+    return f'{display_hour}:{mins:02d} {suffix}'
+
+def _format_datetime_range(start_dt, end_dt):
+    return f'{start_dt.strftime("%b %d, %I:%M %p")} - {end_dt.strftime("%b %d, %I:%M %p")}'
+
+def _resource_conflicts(resource, start_dt, end_dt, exclude_booking_id=None):
+    bookings = VenueBooking.objects.filter(
+        resources=resource,
+        start_date__lte=end_dt.date(),
+        end_date__gte=start_dt.date(),
+        status__in=BOOKING_ACTIVE_STATUSES,
+    )
+    if exclude_booking_id:
+        bookings = bookings.exclude(id=exclude_booking_id)
+
+    intervals = []
+
+    for booking in bookings:
+        booking_start_dt, booking_end_dt = _booking_window(booking.start_date, booking.end_date, booking.start_time, booking.end_time)
+        booking_start_dt -= datetime.timedelta(hours=float(resource.setup_buffer_hours or 0))
+        booking_end_dt += datetime.timedelta(hours=float(resource.cleanup_buffer_hours or 0))
+
+        if booking_start_dt < end_dt and booking_end_dt > start_dt:
+            overlap_start = max(start_dt, booking_start_dt)
+            overlap_end = min(end_dt, booking_end_dt)
+            if overlap_start < overlap_end:
+                intervals.append({
+                    'type': 'booking',
+                    'booking_id': booking.id,
+                    'booking_number': booking.booking_number,
+                    'start': overlap_start.timestamp(),
+                    'end': overlap_end.timestamp(),
+                    'label': _format_datetime_range(overlap_start, overlap_end),
+                })
+
+    req_start_aw = timezone.make_aware(start_dt) if timezone.is_naive(start_dt) else start_dt
+    req_end_aw = timezone.make_aware(end_dt) if timezone.is_naive(end_dt) else end_dt
+    for lock in ResourceLock.objects.filter(resource=resource, expires_at__gt=timezone.now()):
+        if lock.start_time < req_end_aw and lock.end_time > req_start_aw:
+            lock_start = timezone.make_naive(lock.start_time) if timezone.is_aware(lock.start_time) else lock.start_time
+            lock_end = timezone.make_naive(lock.end_time) if timezone.is_aware(lock.end_time) else lock.end_time
+            overlap_start = max(start_dt, lock_start)
+            overlap_end = min(end_dt, lock_end)
+            if overlap_start < overlap_end:
+                intervals.append({
+                    'type': 'lock',
+                    'start': overlap_start.timestamp(),
+                    'end': overlap_end.timestamp(),
+                    'label': _format_datetime_range(overlap_start, overlap_end),
+                })
+    intervals.sort(key=lambda item: item['start'])
+    return intervals
+
+def _availability_for_resources(property_obj, resource_ids, start_dt, end_dt, exclude_booking_id=None):
+    resources = property_obj.resources.filter(id__in=resource_ids, status='Active')
+    requested_ids = {int(rid) for rid in resource_ids}
+    found_ids = {res.id for res in resources}
+    req_start_ts = start_dt.timestamp()
+    req_end_ts = end_dt.timestamp()
+    details = []
+    all_available = True
+
+    for missing_id in sorted(requested_ids - found_ids):
+        all_available = False
+        details.append({
+            'resource_id': missing_id,
+            'resource_name': 'Unknown resource',
+            'status': 'unavailable',
+            'available': False,
+            'conflicts': [{'label': 'Resource is inactive or not part of this property'}],
+            'available_slots': [],
+            'unavailable_slots': [{'label': _format_datetime_range(start_dt, end_dt)}],
+        })
+
+    for res in resources:
+        conflicts = _resource_conflicts(res, start_dt, end_dt, exclude_booking_id)
+        occupied = []
+        for item in conflicts:
+            if not occupied or item['start'] > occupied[-1]['end']:
+                occupied.append({'start': item['start'], 'end': item['end']})
+            else:
+                occupied[-1]['end'] = max(occupied[-1]['end'], item['end'])
+
+        available_segments = []
+        cursor = req_start_ts
+        for block in occupied:
+            if cursor < block['start']:
+                s_dt = datetime.datetime.fromtimestamp(cursor)
+                e_dt = datetime.datetime.fromtimestamp(block['start'])
+                available_segments.append({'start': cursor, 'end': block['start'], 'label': _format_datetime_range(s_dt, e_dt)})
+            cursor = max(cursor, block['end'])
+        if cursor < req_end_ts:
+            s_dt = datetime.datetime.fromtimestamp(cursor)
+            e_dt = datetime.datetime.fromtimestamp(req_end_ts)
+            available_segments.append({'start': cursor, 'end': req_end_ts, 'label': _format_datetime_range(s_dt, e_dt)})
+
+        if not occupied:
+            resource_status = 'available'
+        elif available_segments:
+            resource_status = 'partial'
+            all_available = False
+        else:
+            resource_status = 'unavailable'
+            all_available = False
+
+        details.append({
+            'resource_id': res.id,
+            'resource_name': res.name,
+            'resource_type': res.resource_type,
+            'status': resource_status,
+            'available': resource_status == 'available',
+            'conflicts': conflicts,
+            'available_slots': available_segments,
+            'unavailable_slots': [{**block, 'label': _format_datetime_range(datetime.datetime.fromtimestamp(block['start']), datetime.datetime.fromtimestamp(block['end']))} for block in occupied],
+        })
+    return all_available, details
+
+def _calculate_booking_price(resources, start_dt, end_dt, extra_charges=0):
+    hours = Decimal(str((end_dt - start_dt).total_seconds() / 3600))
+    days = Decimal(str(max(1, (end_dt.date() - start_dt.date()).days + 1)))
+    resource_lines = []
+    subtotal = Decimal('0.00')
+    deposit = Decimal('0.00')
+
+    for res in resources:
+        hourly = _money(res.hourly_rate)
+        half_day = _money(res.half_day_rate)
+        full_day = _money(res.full_day_rate)
+        if hours <= Decimal('4') and hourly > 0:
+            amount = hourly * hours
+            rate_label = 'Hourly'
+        elif hours <= Decimal('6') and half_day > 0:
+            amount = half_day
+            rate_label = 'Half Day'
+        elif full_day > 0:
+            amount = full_day * days
+            rate_label = 'Full Day'
+        elif hourly > 0:
+            amount = hourly * hours
+            rate_label = 'Hourly'
+        else:
+            amount = Decimal('0.00')
+            rate_label = 'No Rate'
+
+        amount = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        subtotal += amount
+        deposit += _money(res.security_deposit)
+        resource_lines.append({
+            'resource_id': res.id,
+            'resource_name': res.name,
+            'resource_type': res.resource_type,
+            'rate_type': rate_label,
+            'duration_hours': float(hours),
+            'amount': float(amount),
+            'deposit': float(_money(res.security_deposit)),
+        })
+
+    extra = _money(extra_charges)
+    taxable = subtotal + extra
+    tax = (taxable * Decimal('0.18')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    total = taxable + tax + deposit
+    return {
+        'resources': resource_lines,
+        'duration_hours': float(hours),
+        'subtotal': float(subtotal),
+        'extra_charges': float(extra),
+        'deposit': float(deposit),
+        'tax': float(tax),
+        'grand_total': float(total),
+    }
+
+def _notify_user(user, title, message, notification_type='booking'):
+    if user:
+        Notification.objects.create(recipient=user, title=title, message=message, notification_type=notification_type)
 
 # ========================
 # Authentication Views
@@ -457,11 +663,16 @@ class RegisterView(APIView):
             role = request.data.get('role', 'member')
             aadhaar = request.data.get('aadhaar', '')
             
-            Member.objects.create(
+            avatar = request.FILES.get('avatar')
+            aadhaar_photo = request.FILES.get('aadhaar_photo')
+            
+            member = Member.objects.create(
                 user=user,
                 name=name,
                 email=user.email or f"{user.username}@example.com",
                 phone=request.data.get('phone', '+91 9999999999'),
+                avatar=avatar,
+                aadhaar_photo=aadhaar_photo,
                 age=request.data.get('age'),
                 gender=request.data.get('gender', 'Male'),
                 state=request.data.get('state', 'Gujarat'),
@@ -491,6 +702,65 @@ class RegisterView(APIView):
                 aadhaar=aadhaar,
                 aadhaar_status='Pending'
             )
+            
+            # If profession is Business, also create a Business object
+            if request.data.get('professionType') == 'Business':
+                from django.core.files.storage import default_storage
+                import json
+                import uuid
+                
+                # Parse hours
+                hours_raw = request.data.get('businessHours')
+                hours_dict = {}
+                if hours_raw:
+                    try:
+                        hours_dict = json.loads(hours_raw) if isinstance(hours_raw, str) else hours_raw
+                    except Exception:
+                        pass
+                
+                # Socials
+                socials_dict = {
+                    'instagram': request.data.get('businessInstagram', ''),
+                    'facebook': request.data.get('businessFacebook', ''),
+                    'youtube': request.data.get('businessYoutube', ''),
+                    'linkedin': request.data.get('businessLinkedin', '')
+                }
+                
+                # Process Business Gallery Uploads
+                gallery_urls = []
+                for key in request.FILES:
+                    if key.startswith('business_gallery_'):
+                        file = request.FILES[key]
+                        ext = os.path.splitext(file.name)[1]
+                        filename = f"businesses/gallery/{uuid.uuid4()}{ext}"
+                        saved_path = default_storage.save(filename, file)
+                        url_path = default_storage.url(saved_path)
+                        gallery_urls.append(url_path)
+                
+                # Create Business Object
+                Business.objects.create(
+                    name=request.data.get('businessName', 'My Business'),
+                    category=request.data.get('businessCategory', 'Other'),
+                    owner=name,
+                    location=request.data.get('businessAddress', request.data.get('village', '')),
+                    phone=request.data.get('businessPhone', request.data.get('phone', '')),
+                    whatsapp=request.data.get('businessWhatsapp', ''),
+                    email=request.data.get('businessEmail', ''),
+                    website=request.data.get('businessWebsite', ''),
+                    desc=request.data.get('businessDesc', ''),
+                    address=request.data.get('businessAddress', ''),
+                    city=request.data.get('businessCity', ''),
+                    state=request.data.get('businessState', ''),
+                    pincode=request.data.get('businessPincode', ''),
+                    gst_no=request.data.get('gstNo', ''),
+                    business_years=request.data.get('businessYears', ''),
+                    hours=hours_dict,
+                    socials=socials_dict,
+                    gallery=gallery_urls,
+                    img=request.FILES.get('business_logo'),
+                    community=community,
+                    status='PENDING'
+                )
             
             # Generate and send registration OTP
             otp_code = str(random.randint(100000, 999999))
@@ -1770,6 +2040,77 @@ class BusinessViewSet(viewsets.ModelViewSet):
     queryset = Business.objects.all().order_by('-featured', '-rating', '-id')
     serializer_class = BusinessSerializer
     permission_classes = [permissions.AllowAny, HasCustomRolePermission]
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        self.handle_gallery_uploads(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self.handle_gallery_uploads(instance)
+
+    def handle_gallery_uploads(self, instance):
+        from django.core.files.storage import default_storage
+        from urllib.parse import urlparse
+        import json
+        import uuid
+        
+        gallery = []
+        raw_gallery = self.request.data.get('gallery')
+        if raw_gallery:
+            if isinstance(raw_gallery, str):
+                try:
+                    gallery = json.loads(raw_gallery)
+                except Exception:
+                    gallery = [raw_gallery]
+            elif isinstance(raw_gallery, list):
+                gallery = raw_gallery
+        else:
+            gallery = instance.gallery or []
+            if isinstance(gallery, str):
+                try:
+                    gallery = json.loads(gallery)
+                except Exception:
+                    gallery = []
+
+        # Clean existing URLs to extract relative path only (remove protocol, host, port, leading slash)
+        cleaned_gallery = []
+        for item in gallery:
+            if isinstance(item, str):
+                if item.startswith('http://') or item.startswith('https://'):
+                    parsed = urlparse(item)
+                    path = parsed.path
+                else:
+                    path = item
+                if path.startswith('/'):
+                    path = path[1:]
+                if path and path not in cleaned_gallery:
+                    cleaned_gallery.append(path)
+
+        # Now handle newly uploaded files
+        for key in self.request.FILES:
+            if key == 'gallery' or key == 'gallery[]' or key.startswith('gallery_') or key.startswith('business_gallery_'):
+                file_list = self.request.FILES.getlist(key)
+                for file in file_list:
+                    ext = os.path.splitext(file.name)[1]
+                    filename = f"businesses/gallery/{uuid.uuid4()}{ext}"
+                    saved_path = default_storage.save(filename, file)
+                    url_path = default_storage.url(saved_path)
+                    
+                    if url_path.startswith('http://') or url_path.startswith('https://'):
+                        parsed = urlparse(url_path)
+                        clean_path = parsed.path
+                    else:
+                        clean_path = url_path
+                    if clean_path.startswith('/'):
+                        clean_path = clean_path[1:]
+                    
+                    if clean_path not in cleaned_gallery:
+                        cleaned_gallery.append(clean_path)
+
+        # Always save the updated gallery list so that deletions and additions are both persisted
+        instance.gallery = cleaned_gallery
+        instance.save(update_fields=['gallery'])
     
     def get_queryset(self):
         user = self.request.user
@@ -4590,7 +4931,6 @@ class MessageViewSet(viewsets.ModelViewSet):
             "message_id": msg.id,
             "reactions": serializer.data.get('reactions', [])
         })
-
     def destroy(self, request, *args, **kwargs):
         msg = self.get_object()
         sender_member = Member.objects.filter(user=request.user).first()
@@ -4599,3 +4939,858 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         msg.delete()
         return Response({"detail": "Message deleted."}, status=status.HTTP_204_NO_CONTENT)
+
+
+from .models import (
+    BookingProperty, PropertyResource, ResourcePricing, ResourceLock,
+    VenueBooking, BookingInspection, BookingRefund, BookingWaitingList,
+    ResourceDependency
+)
+from .serializers import (
+    BookingPropertySerializer, PropertyResourceSerializer, ResourcePricingSerializer,
+    ResourceLockSerializer, VenueBookingSerializer, BookingInspectionSerializer,
+    BookingRefundSerializer, BookingWaitingListSerializer, ResourceDependencySerializer
+)
+
+class BookingPropertyViewSet(viewsets.ModelViewSet):
+    serializer_class = BookingPropertySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _member(self):
+        return Member.objects.filter(user=self.request.user).select_related('community').first()
+
+    def _is_super_admin(self, member=None):
+        return self.request.user.is_superuser or (member and member.role == 'super_admin')
+
+    def get_queryset(self):
+        user = self.request.user
+        member = self._member()
+        if not member:
+            if user.is_superuser:
+                return BookingProperty.objects.all()
+            return BookingProperty.objects.none()
+
+        if self._is_super_admin(member):
+            return BookingProperty.objects.all()
+        elif member.role == 'community_admin':
+            return BookingProperty.objects.filter(community=member.community)
+        
+        community_ids = {member.community.id}
+        curr = member.community
+        while curr and curr.parent_id:
+            community_ids.add(curr.parent_id)
+            curr = curr.parent
+            
+        def get_descendants(c):
+            ids = set()
+            for child in c.subsidiaries.all():
+                ids.add(child.id)
+                ids.update(get_descendants(child))
+            return ids
+        community_ids.update(get_descendants(member.community))
+        
+        filter_comm = self.request.query_params.get('community')
+        if filter_comm and str(filter_comm).isdigit() and int(filter_comm) in community_ids:
+            return BookingProperty.objects.filter(community_id=int(filter_comm), status='Approved', notified=True)
+
+        return BookingProperty.objects.filter(community_id__in=community_ids, status='Approved', notified=True)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        member = self._member()
+        status = 'Approved' if (self._is_super_admin(member) or (member and member.role == 'community_admin')) else 'Pending Approval'
+        is_approved = status == 'Approved'
+        
+        photos_data = self.request.data.get('photos')
+        import json
+        if isinstance(photos_data, str):
+            try:
+                photos = json.loads(photos_data)
+            except:
+                photos = [photos_data]
+        elif isinstance(photos_data, list):
+            photos = photos_data
+        else:
+            photos = list(serializer.validated_data.get('photos', []))
+
+        if 'uploaded_photos' in self.request.FILES:
+            from django.core.files.storage import default_storage
+            for f in self.request.FILES.getlist('uploaded_photos'):
+                path = default_storage.save(f'property_photos/{f.name}', f)
+                photos.append(default_storage.url(path))
+
+        if member and member.community:
+            serializer.save(community=member.community, status=status, photos=photos, notified=is_approved)
+        else:
+            community_id = self.request.data.get('community')
+            community = None
+            if community_id:
+                try:
+                    community = Community.objects.get(id=community_id)
+                except (Community.DoesNotExist, ValueError):
+                    pass
+            if not community:
+                community = Community.objects.first()
+            if not community:
+                from rest_framework import serializers
+                raise serializers.ValidationError({"community": "A community must exist before creating properties."})
+            serializer.save(community=community, status=status, photos=photos, notified=is_approved)
+
+    def perform_update(self, serializer):
+        member = self._member()
+        instance = self.get_object()
+        
+        photos_data = self.request.data.get('photos')
+        import json
+        if isinstance(photos_data, str):
+            try:
+                photos = json.loads(photos_data)
+            except:
+                photos = [photos_data]
+        elif isinstance(photos_data, list):
+            photos = photos_data
+        else:
+            photos = list(serializer.validated_data.get('photos', instance.photos))
+
+        if 'uploaded_photos' in self.request.FILES:
+            from django.core.files.storage import default_storage
+            for f in self.request.FILES.getlist('uploaded_photos'):
+                path = default_storage.save(f'property_photos/{f.name}', f)
+                photos.append(default_storage.url(path))
+
+        if not (self._is_super_admin(member) or (member and member.role == 'community_admin' and instance.community_id == member.community_id)):
+            serializer.save(community=instance.community, status='Pending Approval', rejection_reason='', photos=photos, notified=False)
+        else:
+            new_status = instance.status
+            if member and member.role == 'community_admin':
+                new_status = 'Approved'
+            serializer.save(status=new_status, photos=photos, notified=(new_status == 'Approved'))
+
+    def destroy(self, request, *args, **kwargs):
+        member = self._member()
+        instance = self.get_object()
+        if not self._is_super_admin(member) and (not member or member.role != 'community_admin' or instance.community_id != member.community_id):
+            return Response({'error': 'You can delete only properties from your own community.'}, status=403)
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        member = self._member()
+        prop = self.get_object()
+        if not (self._is_super_admin(member) or (member and member.role == 'community_admin' and prop.community_id == member.community_id)):
+            return Response({'error': 'Only Super Admins or Community Admins of this property can approve properties.'}, status=403)
+        prop.status = 'Approved'
+        prop.rejection_reason = ''
+        prop.notified = True
+        prop.save()
+        return Response({'status': 'Approved successfully'})
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        member = self._member()
+        prop = self.get_object()
+        if not (self._is_super_admin(member) or (member and member.role == 'community_admin' and prop.community_id == member.community_id)):
+            return Response({'error': 'Only Super Admins or Community Admins of this property can reject properties.'}, status=403)
+        reason = str(request.data.get('rejection_reason', '')).strip()
+        if not reason:
+            return Response({'rejection_reason': 'Rejection reason is required.'}, status=400)
+        prop.status = 'Rejected'
+        prop.rejection_reason = reason
+        prop.save()
+        return Response({'status': 'Rejected successfully'})
+
+    @action(detail=True, methods=['post'])
+    def notify(self, request, pk=None):
+        member = self._member()
+        prop = self.get_object()
+        if not member or member.role != 'community_admin' or prop.community_id != member.community_id:
+            return Response({'error': 'Only the community admin of this property can notify members.'}, status=403)
+        if prop.status != 'Approved':
+            return Response({'error': 'Only approved properties can be notified.'}, status=400)
+        prop.notified = True
+        prop.save()
+        
+        # Send notifications to all community members
+        from api.models import Member
+        community_members = Member.objects.filter(community=prop.community, role='member').select_related('user')
+        for m in community_members:
+            if m.user:
+                _notify_user(
+                    user=m.user,
+                    title=f"New Venue Available: {prop.name}",
+                    message=f"A new venue '{prop.name}' is now available for booking in your community! Check it out.",
+                    notification_type='booking'
+                )
+        return Response({'status': 'Notified successfully'})
+
+    @action(detail=True, methods=['post'])
+    def check_availability(self, request, pk=None):
+        property_obj = self.get_object()
+        resource_ids = request.data.get('resource_ids') or []
+        if not resource_ids and request.data.get('entire_property'):
+            resource_ids = list(property_obj.resources.filter(status='Active').values_list('id', flat=True))
+        try:
+            start_date, end_date, start_time, end_time, start_dt, end_dt = _parse_booking_request(request.data)
+            resource_ids = [int(rid) for rid in resource_ids]
+        except Exception as exc:
+            return Response({'error': str(exc) or 'Invalid date or time format.'}, status=400)
+
+        all_available, details = _availability_for_resources(property_obj, resource_ids, start_dt, end_dt)
+        selected_resources = property_obj.resources.filter(id__in=resource_ids, status='Active')
+        pricing = _calculate_booking_price(selected_resources, start_dt, end_dt, request.data.get('extra_charges', 0))
+        suggestions = []
+        if not all_available:
+            other_resources = property_obj.resources.exclude(id__in=resource_ids).filter(status='Active')
+            for res in other_resources:
+                available, alt_details = _availability_for_resources(property_obj, [res.id], start_dt, end_dt)
+                if available:
+                    suggestions.append({
+                        'id': res.id,
+                        'name': res.name,
+                        'resource_type': res.resource_type
+                    })
+                    
+        return Response({
+            'available': all_available,
+            'status': 'available' if all_available else 'partial' if any(d['status'] == 'partial' for d in details) else 'unavailable',
+            'details': details,
+            'pricing': pricing,
+            'suggestions': suggestions
+        })
+
+    @action(detail=True, methods=['post'])
+    def calculate_price(self, request, pk=None):
+        property_obj = self.get_object()
+        resource_ids = request.data.get('resource_ids') or []
+        if not resource_ids and request.data.get('entire_property'):
+            resource_ids = list(property_obj.resources.filter(status='Active').values_list('id', flat=True))
+        try:
+            start_date, end_date, start_time, end_time, start_dt, end_dt = _parse_booking_request(request.data)
+            resource_ids = [int(rid) for rid in resource_ids]
+        except Exception as exc:
+            return Response({'error': str(exc) or 'Invalid date or time format.'}, status=400)
+        resources = property_obj.resources.filter(id__in=resource_ids, status='Active')
+        return Response(_calculate_booking_price(resources, start_dt, end_dt, request.data.get('extra_charges', 0)))
+
+class PropertyResourceViewSet(viewsets.ModelViewSet):
+    serializer_class = PropertyResourceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if user.is_superuser or (member and member.role == 'super_admin'):
+            return PropertyResource.objects.all()
+        if member and member.role == 'community_admin':
+            return PropertyResource.objects.filter(property__community=member.community)
+        if member:
+            return PropertyResource.objects.filter(property__community=member.community, property__status='Approved', status='Active')
+        return PropertyResource.objects.none()
+
+    def perform_create(self, serializer):
+        member = Member.objects.filter(user=self.request.user).first()
+        prop = serializer.validated_data.get('property')
+        if not (self.request.user.is_superuser or (member and member.role == 'super_admin')):
+            if not member or member.role != 'community_admin' or prop.community_id != member.community_id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You can add resources only to properties in your community.')
+        serializer.save()
+
+    @action(detail=False, methods=['post'])
+    def bulk_create(self, request):
+        member = Member.objects.filter(user=request.user).first()
+
+        # --- New format: { resources: [{property, name, ...}, ...] } ---
+        resources_list = request.data.get('resources')
+        if resources_list and isinstance(resources_list, list):
+            if not resources_list:
+                return Response({'error': 'Resources list is empty.'}, status=400)
+
+            # Validate property from the first item (all items must share the same property)
+            prop_id = resources_list[0].get('property')
+            prop = BookingProperty.objects.filter(id=prop_id).first()
+            if not prop:
+                return Response({'error': f'Property with id={prop_id} not found'}, status=404)
+
+            if not (request.user.is_superuser or (member and member.role == 'super_admin')):
+                if not member or member.role != 'community_admin' or prop.community_id != member.community_id:
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied('You can add resources only to properties in your community.')
+
+            created = []
+            errors = []
+            for i, item in enumerate(resources_list):
+                serializer = self.get_serializer(data=item)
+                if serializer.is_valid():
+                    self.perform_create(serializer)
+                    created.append(serializer.data)
+                else:
+                    errors.append({'index': i, 'errors': serializer.errors})
+
+            if errors and not created:
+                return Response({'error': 'Validation failed for all resources', 'details': errors}, status=400)
+
+            return Response(
+                {'message': f'Successfully created {len(created)} resources', 'resources': created, 'errors': errors},
+                status=201
+            )
+
+        # --- Legacy format: single property + prefix + range_start + range_end ---
+        prop_id = request.data.get('property')
+        prefix = request.data.get('prefix', 'Room')
+        start_idx = int(request.data.get('range_start', 1))
+        end_idx = int(request.data.get('range_end', 1))
+
+        prop = BookingProperty.objects.filter(id=prop_id).first()
+        if not prop:
+            return Response({'error': 'Property not found'}, status=404)
+
+        if not (request.user.is_superuser or (member and member.role == 'super_admin')):
+            if not member or member.role != 'community_admin' or prop.community_id != member.community_id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You can add resources only to properties in your community.')
+
+        base_data = request.data.copy()
+        base_data.pop('prefix', None)
+        base_data.pop('range_start', None)
+        base_data.pop('range_end', None)
+
+        created = []
+        for i in range(start_idx, end_idx + 1):
+            data = base_data.copy()
+            data['name'] = f"{prefix} {i}"
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            created.append(serializer.data)
+
+        return Response({'message': f'Successfully created {len(created)} resources', 'resources': created}, status=201)
+
+    def perform_update(self, serializer):
+        member = Member.objects.filter(user=self.request.user).first()
+        instance = self.get_object()
+        target_property = serializer.validated_data.get('property', instance.property)
+        if not (self.request.user.is_superuser or (member and member.role == 'super_admin')):
+            if not member or member.role != 'community_admin' or target_property.community_id != member.community_id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You can manage resources only in your community.')
+        serializer.save()
+
+class ResourcePricingViewSet(viewsets.ModelViewSet):
+    serializer_class = ResourcePricingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if user.is_superuser or (member and member.role == 'super_admin'):
+            return ResourcePricing.objects.all()
+        if member and member.role == 'community_admin':
+            return ResourcePricing.objects.filter(resource__property__community=member.community)
+        if member:
+            return ResourcePricing.objects.filter(resource__property__community=member.community, resource__property__status='Approved', resource__status='Active')
+        return ResourcePricing.objects.none()
+
+    def perform_create(self, serializer):
+        member = Member.objects.filter(user=self.request.user).first()
+        resource = serializer.validated_data.get('resource')
+        if not (self.request.user.is_superuser or (member and member.role == 'super_admin')):
+            if not member or member.role != 'community_admin' or resource.property.community_id != member.community_id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You can price resources only in your community.')
+        serializer.save()
+
+class ResourceDependencyViewSet(viewsets.ModelViewSet):
+    serializer_class = ResourceDependencySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if user.is_superuser or (member and member.role == 'super_admin'):
+            return ResourceDependency.objects.all()
+        if member and member.role == 'community_admin':
+            return ResourceDependency.objects.filter(resource__property__community=member.community)
+        if member:
+            return ResourceDependency.objects.filter(resource__property__community=member.community, resource__property__status='Approved', resource__status='Active')
+        return ResourceDependency.objects.none()
+
+    def perform_create(self, serializer):
+        member = Member.objects.filter(user=self.request.user).first()
+        resource = serializer.validated_data.get('resource')
+        if not (self.request.user.is_superuser or (member and member.role == 'super_admin')):
+            if not member or member.role != 'community_admin' or resource.property.community_id != member.community_id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You can manage dependencies only in your community.')
+        serializer.save()
+
+
+class VenueBookingViewSet(viewsets.ModelViewSet):
+    serializer_class = VenueBookingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _member(self):
+        return Member.objects.filter(user=self.request.user).select_related('community').first()
+
+    def _is_admin_for_booking(self, booking, member=None):
+        member = member or self._member()
+        return self.request.user.is_superuser or (
+            member and member.role in ['super_admin', 'community_admin'] and booking.property.community_id == member.community_id
+        )
+
+    def get_queryset(self):
+        user = self.request.user
+        member = self._member()
+        if not member:
+            return VenueBooking.objects.none()
+
+        if user.is_superuser or member.role == 'super_admin':
+            return VenueBooking.objects.all()
+        elif member.role == 'community_admin':
+            return VenueBooking.objects.filter(property__community=member.community)
+            
+        return VenueBooking.objects.filter(member=member)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        member = self._member()
+        prop = serializer.validated_data.get('property')
+        if prop and prop.status != 'Approved':
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'property': 'Only approved properties can be booked.'})
+        resources = list(serializer.validated_data.get('resources') or [])
+        if not resources:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'resources': 'Select at least one resource.'})
+        if any(res.property_id != prop.id or res.status != 'Active' for res in resources):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'resources': 'All selected resources must be active and belong to the selected property.'})
+
+        start_date = serializer.validated_data.get('start_date')
+        end_date = serializer.validated_data.get('end_date')
+        start_time = serializer.validated_data.get('start_time')
+        end_time = serializer.validated_data.get('end_time')
+        start_dt, end_dt = _booking_window(start_date, end_date, start_time, end_time)
+        if end_dt <= start_dt:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'end_time': 'End time must be after start time.'})
+
+        duration_hours = Decimal(str((end_dt - start_dt).total_seconds() / 3600))
+        duration_errors = []
+        for res in resources:
+            if duration_hours < Decimal(str(res.min_booking_duration_hours)):
+                duration_errors.append(f'{res.name}: minimum {res.min_booking_duration_hours} hour(s)')
+            if duration_hours > Decimal(str(res.max_booking_duration_hours)):
+                duration_errors.append(f'{res.name}: maximum {res.max_booking_duration_hours} hour(s)')
+        if duration_errors:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'duration': duration_errors})
+
+        # Validate Dependencies
+        selected_ids = {res.id for res in resources}
+        for res in resources:
+            for dep in res.dependencies.all():
+                if dep.requires.id not in selected_ids:
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({'resources': f'{res.name} requires {dep.requires.name} to be booked together.'})
+
+        all_available, details = _availability_for_resources(prop, [res.id for res in resources], start_dt, end_dt)
+        if not all_available:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'availability': details})
+
+        pricing = _calculate_booking_price(resources, start_dt, end_dt, serializer.validated_data.get('extra_charges', 0))
+        
+        payment_ref = serializer.validated_data.get('payment_reference')
+        payment_screen = serializer.validated_data.get('payment_screenshot')
+        payment_method_val = serializer.validated_data.get('payment_method')
+        
+        has_payment = bool(payment_ref or payment_screen)
+        payment_status_value = 'Under Review' if has_payment else 'Pending'
+        
+        if prop.approval_required or payment_method_val == 'Cash':
+            status_value = 'Pending Approval'
+        else:
+            status_value = 'Pending Approval' if has_payment else 'Pending Payment'
+
+        if member:
+            booking = serializer.save(
+                member=member,
+                status=status_value,
+                payment_status=payment_status_value,
+                base_amount=pricing['subtotal'],
+                extra_charges=pricing['extra_charges'],
+                tax_amount=pricing['tax'],
+                deposit_amount=pricing['deposit'],
+                total_amount=pricing['grand_total'],
+                pricing_breakdown=pricing,
+            )
+        else:
+            booking = serializer.save(
+                status=status_value,
+                payment_status=payment_status_value,
+                base_amount=pricing['subtotal'],
+                extra_charges=pricing['extra_charges'],
+                tax_amount=pricing['tax'],
+                deposit_amount=pricing['deposit'],
+                total_amount=pricing['grand_total'],
+                pricing_breakdown=pricing,
+            )
+        admins = User.objects.filter(member_profile__community=prop.community, member_profile__role='community_admin')
+        for admin in admins:
+            _notify_user(admin, 'Booking Created', f'{booking.booking_number} was created for {prop.name}.', 'booking_created')
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        prop = serializer.validated_data.get('property', instance.property)
+        if prop and prop.status != 'Approved':
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'property': 'Only approved properties can be booked.'})
+        
+        resources = serializer.validated_data.get('resources')
+        if resources is not None:
+            resources = list(resources)
+        else:
+            resources = list(instance.resources.all())
+            
+        if not resources:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'resources': 'Select at least one resource.'})
+            
+        if any(res.property_id != prop.id or res.status != 'Active' for res in resources):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'resources': 'All selected resources must be active and belong to the selected property.'})
+
+        start_date = serializer.validated_data.get('start_date', instance.start_date)
+        end_date = serializer.validated_data.get('end_date', instance.end_date)
+        start_time = serializer.validated_data.get('start_time', instance.start_time)
+        end_time = serializer.validated_data.get('end_time', instance.end_time)
+        
+        start_dt, end_dt = _booking_window(start_date, end_date, start_time, end_time)
+        if end_dt <= start_dt:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'end_time': 'End time must be after start time.'})
+
+        duration_hours = Decimal(str((end_dt - start_dt).total_seconds() / 3600))
+        duration_errors = []
+        for res in resources:
+            if duration_hours < Decimal(str(res.min_booking_duration_hours)):
+                duration_errors.append(f'{res.name}: minimum {res.min_booking_duration_hours} hour(s)')
+            if duration_hours > Decimal(str(res.max_booking_duration_hours)):
+                duration_errors.append(f'{res.name}: maximum {res.max_booking_duration_hours} hour(s)')
+        if duration_errors:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'duration': duration_errors})
+
+        # Validate Dependencies
+        selected_ids = {res.id for res in resources}
+        for res in resources:
+            for dep in res.dependencies.all():
+                if dep.requires.id not in selected_ids:
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({'resources': f'{res.name} requires {dep.requires.name} to be booked together.'})
+
+        # Availability/Conflict checks (excluding current booking)
+        all_available, details = _availability_for_resources(prop, [res.id for res in resources], start_dt, end_dt, exclude_booking_id=instance.id)
+        if not all_available:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'availability': details})
+
+        extra_charges = serializer.validated_data.get('extra_charges', instance.extra_charges)
+        pricing = _calculate_booking_price(resources, start_dt, end_dt, extra_charges)
+        
+        serializer.save(
+            base_amount=pricing['subtotal'],
+            extra_charges=pricing['extra_charges'],
+            tax_amount=pricing['tax'],
+            deposit_amount=pricing['deposit'],
+            total_amount=pricing['grand_total'],
+            pricing_breakdown=pricing,
+        )
+
+    @action(detail=True, methods=['post'])
+    def approve_booking(self, request, pk=None):
+        booking = self.get_object()
+        if not self._is_admin_for_booking(booking):
+            return Response({'error': 'Only community admins can approve bookings.'}, status=403)
+        if booking.status != 'Pending Approval':
+            return Response({'error': 'Only pending approval bookings can be approved.'}, status=400)
+        booking.status = 'Pending Payment'
+        booking.save()
+        _notify_user(booking.member.user if booking.member and booking.member.user else None, 'Booking Approved', f'{booking.booking_number} is approved. Please submit payment.', 'booking_approved')
+        return Response(self.get_serializer(booking).data)
+
+    @action(detail=True, methods=['post'])
+    def reject_booking(self, request, pk=None):
+        booking = self.get_object()
+        if not self._is_admin_for_booking(booking):
+            return Response({'error': 'Only community admins can reject bookings.'}, status=403)
+        booking.status = 'Rejected'
+        booking.save()
+        _notify_user(booking.member.user if booking.member and booking.member.user else None, 'Booking Rejected', f'{booking.booking_number} was rejected.', 'booking_rejected')
+        return Response(self.get_serializer(booking).data)
+
+    @action(detail=True, methods=['post'])
+    def submit_payment(self, request, pk=None):
+        booking = self.get_object()
+        member = self._member()
+        if booking.member_id != getattr(member, 'id', None):
+            return Response({'error': 'You can submit payment only for your booking.'}, status=403)
+        if booking.status != 'Pending Payment':
+            return Response({'error': 'Payment can be submitted only after booking approval.'}, status=400)
+        payment_method = request.data.get('payment_method')
+        if payment_method not in ['Cash', 'UPI', 'Bank Transfer']:
+            return Response({'payment_method': 'Payment method must be Cash, UPI, or Bank Transfer.'}, status=400)
+        payment_reference = str(request.data.get('payment_reference', '')).strip()
+        if payment_method != 'Cash' and not payment_reference:
+            return Response({'payment_reference': 'Transaction ID is required for UPI and Bank Transfer.'}, status=400)
+        booking.payment_method = payment_method
+        booking.payment_reference = payment_reference
+        if 'payment_screenshot' in request.FILES:
+            booking.payment_screenshot = request.FILES['payment_screenshot']
+        booking.payment_status = 'Under Review'
+        booking.save()
+        admins = User.objects.filter(member_profile__community=booking.property.community, member_profile__role='community_admin')
+        for admin in admins:
+            _notify_user(admin, 'Payment Submitted', f'Payment for {booking.booking_number} is ready for verification.', 'payment_submitted')
+        return Response(self.get_serializer(booking).data)
+
+    @action(detail=True, methods=['post'])
+    def verify_payment(self, request, pk=None):
+        booking = self.get_object()
+        if not self._is_admin_for_booking(booking):
+            return Response({'error': 'Only community admins can verify payments.'}, status=403)
+        booking.payment_status = 'Paid'
+        booking.status = 'Confirmed'
+        booking.payment_verified_by = request.user
+        if not booking.receipt_number:
+            booking.receipt_number = f"REC-{booking.booking_number.replace('BK-', '')}"
+        booking.save()
+        _notify_user(booking.member.user if booking.member and booking.member.user else None, 'Payment Verified', f'Payment for {booking.booking_number} is verified.', 'payment_verified')
+        return Response(self.get_serializer(booking).data)
+
+    @action(detail=True, methods=['post'])
+    def reject_payment(self, request, pk=None):
+        booking = self.get_object()
+        if not self._is_admin_for_booking(booking):
+            return Response({'error': 'Only community admins can reject payments.'}, status=403)
+        booking.payment_status = 'Rejected'
+        booking.status = 'Pending Payment'
+        booking.save()
+        _notify_user(booking.member.user if booking.member and booking.member.user else None, 'Payment Rejected', f'Payment for {booking.booking_number} was rejected. Please submit again.', 'payment_rejected')
+        return Response(self.get_serializer(booking).data)
+
+    @action(detail=True, methods=['post'])
+    def check_in(self, request, pk=None):
+        booking = self.get_object()
+        from django.utils import timezone
+        booking.checked_in_at = timezone.now()
+        booking.status = 'Checked In'
+        booking.save()
+        return Response({'status': 'Checked in successfully.'})
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        booking = self.get_object()
+        if not self._is_admin_for_booking(booking):
+            return Response({'error': 'Only community admins can complete bookings.'}, status=403)
+        booking.status = 'Completed'
+        booking.save()
+        return Response({'status': 'Event completed.'})
+
+    @action(detail=True, methods=['post'])
+    def request_cancellation(self, request, pk=None):
+        booking = self.get_object()
+        if booking.status in ['Cancelled', 'Completed']:
+            return Response({'error': 'Booking cannot be cancelled.'}, status=400)
+        
+        event_start_dt = timezone.make_aware(datetime.datetime.combine(booking.start_date, booking.start_time))
+        now = timezone.now()
+        
+        hours_before = (event_start_dt - now).total_seconds() / 3600.0
+        prop = booking.property
+        
+        refund_amount = 0.0
+        refund_pct = 0.0
+        if prop.cancellation_allowed:
+            tiers = prop.refund_policy_tiers or []
+            matched = False
+            for tier in sorted(tiers, key=lambda item: float(item.get('hours', 0)), reverse=True):
+                if hours_before >= float(tier.get('hours', 0)):
+                    refund_pct = float(tier.get('percentage', 0))
+                    matched = True
+                    break
+            if not matched and hours_before >= prop.cancellation_hours:
+                refund_pct = float(prop.refund_percentage)
+            refund_amount = float(booking.total_amount) * (refund_pct / 100.0)
+            
+        booking.status = 'Refund Requested' if refund_amount > 0 else 'Cancelled'
+        booking.save()
+        
+        if refund_amount > 0:
+            BookingRefund.objects.create(
+                booking=booking,
+                amount=refund_amount,
+                reason=request.data.get('reason', 'User requested cancellation'),
+                refund_percentage=refund_pct,
+                status='Requested'
+            )
+            admins = User.objects.filter(member_profile__community=booking.property.community, member_profile__role='community_admin')
+            for admin in admins:
+                _notify_user(admin, 'Refund Requested', f'Refund request created for {booking.booking_number}.', 'refund_requested')
+        else:
+            _notify_user(booking.member.user if booking.member and booking.member.user else None, 'Booking Cancelled', f'{booking.booking_number} was cancelled.', 'booking_cancelled')
+            
+        return Response({
+            'status': 'Refund Requested' if refund_amount > 0 else 'Cancelled',
+            'refund_amount': refund_amount,
+            'refund_pct': refund_pct
+        })
+
+    @action(detail=True, methods=['get'])
+    def invoice_pdf(self, request, pk=None):
+        booking = self.get_object()
+        lines = [
+            'We Are Going - Booking Invoice',
+            f'Booking Number: {booking.booking_number}',
+            f'Invoice Number: {booking.invoice_number}',
+            f'Receipt Number: {booking.receipt_number or "Pending"}',
+            f'Property: {booking.property.name}',
+            f'Member: {booking.member.name if booking.member else booking.guest_name}',
+            f'Date: {booking.start_date} to {booking.end_date}',
+            f'Time: {booking.start_time} - {booking.end_time}',
+            'Resources: ' + ', '.join([res.name for res in booking.resources.all()]),
+            f'Subtotal: INR {booking.base_amount}',
+            f'Extra Charges: INR {booking.extra_charges}',
+            f'Deposit: INR {booking.deposit_amount}',
+            f'Tax: INR {booking.tax_amount}',
+            f'Total Amount: INR {booking.total_amount}',
+        ]
+        text = '\\n'.join(lines)
+        stream = 'BT /F1 12 Tf 50 780 Td ' + ' T* '.join(f'({line})' for line in lines) + ' ET'
+        stream_bytes = stream.encode('latin-1', errors='replace')
+        pdf = (
+            b'%PDF-1.4\n'
+            b'1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n'
+            b'2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n'
+            b'3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n'
+            b'4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n'
+            + f'5 0 obj << /Length {len(stream_bytes)} >> stream\n'.encode('ascii')
+            + stream_bytes
+            + b'\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF'
+        )
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{booking.invoice_number or booking.booking_number}.pdf"'
+        return response
+
+class BookingInspectionViewSet(viewsets.ModelViewSet):
+    serializer_class = BookingInspectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if user.is_superuser or (member and member.role == 'super_admin'):
+            return BookingInspection.objects.all()
+        if member and member.role == 'community_admin':
+            return BookingInspection.objects.filter(booking__property__community=member.community)
+        if member:
+            return BookingInspection.objects.filter(booking__member=member)
+        return BookingInspection.objects.none()
+
+class BookingRefundViewSet(viewsets.ModelViewSet):
+    serializer_class = BookingRefundSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if user.is_superuser or (member and member.role == 'super_admin'):
+            return BookingRefund.objects.all()
+        if member and member.role == 'community_admin':
+            return BookingRefund.objects.filter(booking__property__community=member.community)
+        if member:
+            return BookingRefund.objects.filter(booking__member=member)
+        return BookingRefund.objects.none()
+
+class BookingWaitingListViewSet(viewsets.ModelViewSet):
+    serializer_class = BookingWaitingListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if user.is_superuser or (member and member.role == 'super_admin'):
+            return BookingWaitingList.objects.all()
+        if member and member.role == 'community_admin':
+            return BookingWaitingList.objects.filter(property__community=member.community)
+        if member:
+            return BookingWaitingList.objects.filter(member=member)
+        return BookingWaitingList.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if member:
+            serializer.save(member=member)
+        else:
+            serializer.save()
+
+class ResourceLockViewSet(viewsets.ModelViewSet):
+    serializer_class = ResourceLockSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        member = Member.objects.filter(user=user).first()
+        if user.is_superuser or (member and member.role == 'super_admin'):
+            return ResourceLock.objects.all()
+        if member and member.role == 'community_admin':
+            return ResourceLock.objects.filter(resource__property__community=member.community)
+        if member:
+            return ResourceLock.objects.filter(user=user, resource__property__community=member.community)
+        return ResourceLock.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        resource_id = request.data.get('resource')
+        start_time_str = request.data.get('start_time')
+        end_time_str = request.data.get('end_time')
+        
+        import datetime
+        from django.utils import timezone
+        
+        try:
+            start_time = timezone.make_aware(datetime.datetime.strptime(start_time_str, '%Y-%m-%dT%H:%M:%S'))
+            end_time = timezone.make_aware(datetime.datetime.strptime(end_time_str, '%Y-%m-%dT%H:%M:%S'))
+        except Exception:
+            try:
+                start_time = timezone.make_aware(datetime.datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S'))
+                end_time = timezone.make_aware(datetime.datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S'))
+            except Exception:
+                try:
+                    s_date = datetime.datetime.strptime(start_time_str[:10], '%Y-%m-%d')
+                    e_date = datetime.datetime.strptime(end_time_str[:10], '%Y-%m-%d')
+                    start_time = timezone.make_aware(datetime.datetime.combine(s_date, datetime.time(9, 0)))
+                    end_time = timezone.make_aware(datetime.datetime.combine(e_date, datetime.time(17, 0)))
+                except Exception:
+                    return Response({'error': 'Invalid date format'}, status=400)
+                
+        conflicting_locks = ResourceLock.objects.filter(
+            resource_id=resource_id,
+            expires_at__gt=timezone.now(),
+            start_time__lt=end_time,
+            end_time__gt=start_time
+        )
+        if conflicting_locks.exists():
+            return Response({'error': 'Resource is temporarily locked by another user.'}, status=400)
+            
+        expires_at = timezone.now() + datetime.timedelta(minutes=10)
+        lock = ResourceLock.objects.create(
+            resource_id=resource_id,
+            user=request.user,
+            start_time=start_time,
+            end_time=end_time,
+            expires_at=expires_at
+        )
+        serializer = self.get_serializer(lock)
+        return Response(serializer.data, status=201)

@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+﻿import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/communities")({
   beforeLoad: () => {
@@ -7,6 +7,6 @@ export const Route = createFileRoute("/communities")({
       search: { page: "communities" },
     });
   },
-  head: () => ({ meta: [{ title: "Communities — We Are Going" }] }),
+  head: () => ({ meta: [{ title: "Communities — WE ARE UNITED" }] }),
   component: () => null,
 });

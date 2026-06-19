@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/context/AuthContext";
 import { DashboardSidebar, MobileBottomNav, MobileHeader, type SidebarItem } from "@/components/wag/Sidebar";
-import { LayoutDashboard, Users, UserCog, UsersRound, Calendar, Megaphone, Image, HandHeart, Briefcase, Building2, Heart, FileBarChart, CreditCard, Settings, ShieldCheck, CalendarCheck } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, UsersRound, Calendar, Megaphone, Image, HandHeart, Briefcase, Building2, Heart, FileBarChart, CreditCard, Settings, ShieldCheck, CalendarCheck, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -9,7 +9,7 @@ export const Route = createFileRoute("/community-admin")({
   component: Layout,
 });
 
-import { Network } from "lucide-react";
+import { Network, PlusCircle } from "lucide-react";
 
 const ITEMS: SidebarItem[] = [
   { to: "/community-admin", label: "Overview", icon: LayoutDashboard },
@@ -21,6 +21,7 @@ const ITEMS: SidebarItem[] = [
   { to: "/community-admin/news", label: "News", icon: Megaphone },
   { to: "/community-admin/gallery", label: "Gallery", icon: Image },
   { to: "/community-admin/donations", label: "Donations", icon: HandHeart },
+  { to: "/community-admin/venues", label: "Venues", icon: MapPin },
   { to: "/community-admin/jobs", label: "Jobs", icon: Briefcase },
   { to: "/community-admin/businesses", label: "Businesses", icon: Building2 },
   { to: "/community-admin/matrimony", label: "Matrimony", icon: Heart },
@@ -65,6 +66,16 @@ function Layout() {
     items.splice(1, 0, { to: "/community-admin/subsidiaries", label: "Subsidiaries", icon: Building2 });
   }
 
+  // Expand Venues into Property management (Parent) and sub-items (Overview, Add Property)
+  const venuesIndex = items.findIndex(i => i.to === "/community-admin/venues");
+  if (venuesIndex !== -1) {
+    items.splice(venuesIndex, 1,
+      { to: "/community-admin/venues", label: "Property management", icon: MapPin, search: { tab: "overview" } },
+      { to: "/community-admin/venues", label: "Overview", icon: LayoutDashboard, search: { tab: "overview" }, isSubItem: true },
+      { to: "/community-admin/venues", label: "Add Property", icon: PlusCircle, search: { tab: "add-property" }, isSubItem: true }
+    );
+  }
+
   // Filter based on RBAC permissions if it's a committee member with a custom role
   const isCommitteeMember = !!user.customRoleName;
   if (isCommitteeMember) {
@@ -84,6 +95,7 @@ function Layout() {
       if (item.label === "Businesses") return hasPerm("View Businesses");
       if (item.label === "Matrimony") return hasPerm("View Profiles");
       if (item.label === "Reports") return hasPerm("View Reports");
+      if (item.label === "Venues" || item.label === "Property management" || item.label === "Add Property" || (item.label === "Overview" && item.to === "/community-admin/venues")) return hasPerm("Manage Properties") || hasPerm("View Properties");
       if (item.label === "Settings") return hasPerm("Edit Community Profile") || hasPerm("Manage Logo") || hasPerm("Manage Banner") || hasPerm("Manage Community Information");
       if (item.label === "Hierarchy") return hasPerm("View Hierarchy");
       if (item.label === "Subsidiaries") return hasPerm("Manage Subsidiaries");

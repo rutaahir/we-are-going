@@ -227,7 +227,9 @@ function MemberJobsPage() {
       data.append("notice_period", formData.noticePeriod);
       data.append("qualification", formData.qualification);
       data.append("skills", formData.skills);
-      data.append("resume", resumeFile);
+      if (resumeFile) {
+        data.append("resume", resumeFile);
+      }
       data.append("cover_letter", formData.coverLetter);
       data.append("portfolio", formData.portfolio);
       data.append("linkedin", formData.linkedin);

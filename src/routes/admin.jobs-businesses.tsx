@@ -403,9 +403,9 @@ function JobsBusinessesAdminPage() {
                 <div className="space-y-2">
                   <h4 className="text-xs uppercase font-bold tracking-wider text-slate-500">Social Connections</h4>
                   <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
-                    {Object.entries(socialsData).map(([platform, handle]) => handle && (
+                    {(Object.entries(socialsData) as [string, any][]).map(([platform, handle]) => handle && (
                       <span key={platform} className="px-3 py-1.5 rounded-lg bg-sand border border-warm capitalize">
-                        {platform}: <strong>{handle as string}</strong>
+                        {platform}: <strong>{handle}</strong>
                       </span>
                     ))}
                   </div>

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, createRootRouteWithContext, useRouter, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
 import { AnimatePresence } from "framer-motion";
 import { useEffect, type ReactNode } from "react";
@@ -6,6 +6,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/context/AuthContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import Navbar from "@/components/wag/Navbar";
 import Footer from "@/components/wag/Footer";
 import { DiamondBackground } from "@/components/wag/DiamondBackground";
@@ -42,10 +43,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "We Are Going — Aapni Samaj, Aapnu Network" },
+      { title: "WE ARE UNITED — Aapni Samaj, Aapnu Network" },
       { name: "description", content: "Community ERP and social network for Indian samaj communities — members, events, matrimony, jobs, donations and more." },
-      { name: "author", content: "We Are Going" },
-      { property: "og:title", content: "We Are Going — Connect Your Samaj Digitally" },
+      { name: "author", content: "WE ARE UNITED" },
+      { property: "og:title", content: "WE ARE UNITED — Connect Your Samaj Digitally" },
       { property: "og:description", content: "Community ERP and social network for Indian samaj communities." },
       { property: "og:type", content: "website" },
     ],
@@ -74,11 +75,11 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const path = useRouterState({ select: s => s.location.pathname });
-  const isAuthArea = path.startsWith("/dashboard") || path.startsWith("/community-admin") || path.startsWith("/admin") || path === "/login";
+  const isAuthArea = path.startsWith("/dashboard") || path.startsWith("/community-admin") || path.startsWith("/admin") || path === "/login" || path.startsWith("/register");
   const hideNavbarAndFooter = isAuthArea || path === "/";
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
+      <LanguageProvider><AuthProvider>
         {/* Global floating diamond background — fixed, behind all content */}
         <DiamondBackground />
         <div style={{ position: "relative", zIndex: 1 }}>
@@ -91,7 +92,7 @@ function RootComponent() {
           {!hideNavbarAndFooter && <Footer />}
         </div>
         <Toaster position="top-right" richColors />
-      </AuthProvider>
+      </AuthProvider></LanguageProvider>
     </QueryClientProvider>
   );
 }

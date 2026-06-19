@@ -25,6 +25,7 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as CommunityAdminIndexRouteImport } from './routes/community-admin.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as RegisterCommunityRouteImport } from './routes/register.community'
+import { Route as DashboardVenuesRouteImport } from './routes/dashboard.venues'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardPlanRouteImport } from './routes/dashboard.plan'
@@ -38,6 +39,7 @@ import { Route as DashboardEventsRouteImport } from './routes/dashboard.events'
 import { Route as DashboardDonationsRouteImport } from './routes/dashboard.donations'
 import { Route as DashboardDirectoryRouteImport } from './routes/dashboard.directory'
 import { Route as DashboardBusinessRouteImport } from './routes/dashboard.business'
+import { Route as CommunityAdminVenuesRouteImport } from './routes/community-admin.venues'
 import { Route as CommunityAdminSubsidiariesRouteImport } from './routes/community-admin.subsidiaries'
 import { Route as CommunityAdminSettingsRouteImport } from './routes/community-admin.settings'
 import { Route as CommunityAdminReportsRouteImport } from './routes/community-admin.reports'
@@ -54,6 +56,7 @@ import { Route as CommunityAdminDonationsRouteImport } from './routes/community-
 import { Route as CommunityAdminCommitteeRouteImport } from './routes/community-admin.committee'
 import { Route as CommunityAdminBusinessesRouteImport } from './routes/community-admin.businesses'
 import { Route as CommunityAdminAdvertisementsRouteImport } from './routes/community-admin.advertisements'
+import { Route as AdminVenuesRouteImport } from './routes/admin.venues'
 import { Route as AdminSubscriptionsRouteImport } from './routes/admin.subscriptions'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminRolesRouteImport } from './routes/admin.roles'
@@ -149,6 +152,11 @@ const RegisterCommunityRoute = RegisterCommunityRouteImport.update({
   path: '/community',
   getParentRoute: () => RegisterRoute,
 } as any)
+const DashboardVenuesRoute = DashboardVenuesRouteImport.update({
+  id: '/venues',
+  path: '/venues',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -213,6 +221,11 @@ const DashboardBusinessRoute = DashboardBusinessRouteImport.update({
   id: '/business',
   path: '/business',
   getParentRoute: () => DashboardRoute,
+} as any)
+const CommunityAdminVenuesRoute = CommunityAdminVenuesRouteImport.update({
+  id: '/venues',
+  path: '/venues',
+  getParentRoute: () => CommunityAdminRoute,
 } as any)
 const CommunityAdminSubsidiariesRoute =
   CommunityAdminSubsidiariesRouteImport.update({
@@ -297,6 +310,11 @@ const CommunityAdminAdvertisementsRoute =
     path: '/advertisements',
     getParentRoute: () => CommunityAdminRoute,
   } as any)
+const AdminVenuesRoute = AdminVenuesRouteImport.update({
+  id: '/venues',
+  path: '/venues',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminSubscriptionsRoute = AdminSubscriptionsRouteImport.update({
   id: '/subscriptions',
   path: '/subscriptions',
@@ -394,6 +412,7 @@ export interface FileRoutesByFullPath {
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/admin/venues': typeof AdminVenuesRoute
   '/community-admin/advertisements': typeof CommunityAdminAdvertisementsRoute
   '/community-admin/businesses': typeof CommunityAdminBusinessesRoute
   '/community-admin/committee': typeof CommunityAdminCommitteeRoute
@@ -410,6 +429,7 @@ export interface FileRoutesByFullPath {
   '/community-admin/reports': typeof CommunityAdminReportsRoute
   '/community-admin/settings': typeof CommunityAdminSettingsRoute
   '/community-admin/subsidiaries': typeof CommunityAdminSubsidiariesRoute
+  '/community-admin/venues': typeof CommunityAdminVenuesRoute
   '/dashboard/business': typeof DashboardBusinessRoute
   '/dashboard/directory': typeof DashboardDirectoryRoute
   '/dashboard/donations': typeof DashboardDonationsRoute
@@ -423,6 +443,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/plan': typeof DashboardPlanRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/venues': typeof DashboardVenuesRoute
   '/register/community': typeof RegisterCommunityRoute
   '/admin/': typeof AdminIndexRoute
   '/community-admin/': typeof CommunityAdminIndexRoute
@@ -451,6 +472,7 @@ export interface FileRoutesByTo {
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/admin/venues': typeof AdminVenuesRoute
   '/community-admin/advertisements': typeof CommunityAdminAdvertisementsRoute
   '/community-admin/businesses': typeof CommunityAdminBusinessesRoute
   '/community-admin/committee': typeof CommunityAdminCommitteeRoute
@@ -467,6 +489,7 @@ export interface FileRoutesByTo {
   '/community-admin/reports': typeof CommunityAdminReportsRoute
   '/community-admin/settings': typeof CommunityAdminSettingsRoute
   '/community-admin/subsidiaries': typeof CommunityAdminSubsidiariesRoute
+  '/community-admin/venues': typeof CommunityAdminVenuesRoute
   '/dashboard/business': typeof DashboardBusinessRoute
   '/dashboard/directory': typeof DashboardDirectoryRoute
   '/dashboard/donations': typeof DashboardDonationsRoute
@@ -480,6 +503,7 @@ export interface FileRoutesByTo {
   '/dashboard/plan': typeof DashboardPlanRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/venues': typeof DashboardVenuesRoute
   '/register/community': typeof RegisterCommunityRoute
   '/admin': typeof AdminIndexRoute
   '/community-admin': typeof CommunityAdminIndexRoute
@@ -513,6 +537,7 @@ export interface FileRoutesById {
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
+  '/admin/venues': typeof AdminVenuesRoute
   '/community-admin/advertisements': typeof CommunityAdminAdvertisementsRoute
   '/community-admin/businesses': typeof CommunityAdminBusinessesRoute
   '/community-admin/committee': typeof CommunityAdminCommitteeRoute
@@ -529,6 +554,7 @@ export interface FileRoutesById {
   '/community-admin/reports': typeof CommunityAdminReportsRoute
   '/community-admin/settings': typeof CommunityAdminSettingsRoute
   '/community-admin/subsidiaries': typeof CommunityAdminSubsidiariesRoute
+  '/community-admin/venues': typeof CommunityAdminVenuesRoute
   '/dashboard/business': typeof DashboardBusinessRoute
   '/dashboard/directory': typeof DashboardDirectoryRoute
   '/dashboard/donations': typeof DashboardDonationsRoute
@@ -542,6 +568,7 @@ export interface FileRoutesById {
   '/dashboard/plan': typeof DashboardPlanRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/venues': typeof DashboardVenuesRoute
   '/register/community': typeof RegisterCommunityRoute
   '/admin/': typeof AdminIndexRoute
   '/community-admin/': typeof CommunityAdminIndexRoute
@@ -576,6 +603,7 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/subscriptions'
+    | '/admin/venues'
     | '/community-admin/advertisements'
     | '/community-admin/businesses'
     | '/community-admin/committee'
@@ -592,6 +620,7 @@ export interface FileRouteTypes {
     | '/community-admin/reports'
     | '/community-admin/settings'
     | '/community-admin/subsidiaries'
+    | '/community-admin/venues'
     | '/dashboard/business'
     | '/dashboard/directory'
     | '/dashboard/donations'
@@ -605,6 +634,7 @@ export interface FileRouteTypes {
     | '/dashboard/plan'
     | '/dashboard/profile'
     | '/dashboard/settings'
+    | '/dashboard/venues'
     | '/register/community'
     | '/admin/'
     | '/community-admin/'
@@ -633,6 +663,7 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/subscriptions'
+    | '/admin/venues'
     | '/community-admin/advertisements'
     | '/community-admin/businesses'
     | '/community-admin/committee'
@@ -649,6 +680,7 @@ export interface FileRouteTypes {
     | '/community-admin/reports'
     | '/community-admin/settings'
     | '/community-admin/subsidiaries'
+    | '/community-admin/venues'
     | '/dashboard/business'
     | '/dashboard/directory'
     | '/dashboard/donations'
@@ -662,6 +694,7 @@ export interface FileRouteTypes {
     | '/dashboard/plan'
     | '/dashboard/profile'
     | '/dashboard/settings'
+    | '/dashboard/venues'
     | '/register/community'
     | '/admin'
     | '/community-admin'
@@ -694,6 +727,7 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/subscriptions'
+    | '/admin/venues'
     | '/community-admin/advertisements'
     | '/community-admin/businesses'
     | '/community-admin/committee'
@@ -710,6 +744,7 @@ export interface FileRouteTypes {
     | '/community-admin/reports'
     | '/community-admin/settings'
     | '/community-admin/subsidiaries'
+    | '/community-admin/venues'
     | '/dashboard/business'
     | '/dashboard/directory'
     | '/dashboard/donations'
@@ -723,6 +758,7 @@ export interface FileRouteTypes {
     | '/dashboard/plan'
     | '/dashboard/profile'
     | '/dashboard/settings'
+    | '/dashboard/venues'
     | '/register/community'
     | '/admin/'
     | '/community-admin/'
@@ -858,6 +894,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterCommunityRouteImport
       parentRoute: typeof RegisterRoute
     }
+    '/dashboard/venues': {
+      id: '/dashboard/venues'
+      path: '/venues'
+      fullPath: '/dashboard/venues'
+      preLoaderRoute: typeof DashboardVenuesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/settings': {
       id: '/dashboard/settings'
       path: '/settings'
@@ -948,6 +991,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/business'
       preLoaderRoute: typeof DashboardBusinessRouteImport
       parentRoute: typeof DashboardRoute
+    }
+    '/community-admin/venues': {
+      id: '/community-admin/venues'
+      path: '/venues'
+      fullPath: '/community-admin/venues'
+      preLoaderRoute: typeof CommunityAdminVenuesRouteImport
+      parentRoute: typeof CommunityAdminRoute
     }
     '/community-admin/subsidiaries': {
       id: '/community-admin/subsidiaries'
@@ -1060,6 +1110,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/community-admin/advertisements'
       preLoaderRoute: typeof CommunityAdminAdvertisementsRouteImport
       parentRoute: typeof CommunityAdminRoute
+    }
+    '/admin/venues': {
+      id: '/admin/venues'
+      path: '/venues'
+      fullPath: '/admin/venues'
+      preLoaderRoute: typeof AdminVenuesRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/admin/subscriptions': {
       id: '/admin/subscriptions'
@@ -1177,6 +1234,7 @@ interface AdminRouteChildren {
   AdminRolesRoute: typeof AdminRolesRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminSubscriptionsRoute: typeof AdminSubscriptionsRoute
+  AdminVenuesRoute: typeof AdminVenuesRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
@@ -1195,6 +1253,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminRolesRoute: AdminRolesRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminSubscriptionsRoute: AdminSubscriptionsRoute,
+  AdminVenuesRoute: AdminVenuesRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 
@@ -1217,6 +1276,7 @@ interface CommunityAdminRouteChildren {
   CommunityAdminReportsRoute: typeof CommunityAdminReportsRoute
   CommunityAdminSettingsRoute: typeof CommunityAdminSettingsRoute
   CommunityAdminSubsidiariesRoute: typeof CommunityAdminSubsidiariesRoute
+  CommunityAdminVenuesRoute: typeof CommunityAdminVenuesRoute
   CommunityAdminIndexRoute: typeof CommunityAdminIndexRoute
 }
 
@@ -1237,6 +1297,7 @@ const CommunityAdminRouteChildren: CommunityAdminRouteChildren = {
   CommunityAdminReportsRoute: CommunityAdminReportsRoute,
   CommunityAdminSettingsRoute: CommunityAdminSettingsRoute,
   CommunityAdminSubsidiariesRoute: CommunityAdminSubsidiariesRoute,
+  CommunityAdminVenuesRoute: CommunityAdminVenuesRoute,
   CommunityAdminIndexRoute: CommunityAdminIndexRoute,
 }
 
@@ -1258,6 +1319,7 @@ interface DashboardRouteChildren {
   DashboardPlanRoute: typeof DashboardPlanRoute
   DashboardProfileRoute: typeof DashboardProfileRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardVenuesRoute: typeof DashboardVenuesRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
 
@@ -1275,6 +1337,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardPlanRoute: DashboardPlanRoute,
   DashboardProfileRoute: DashboardProfileRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardVenuesRoute: DashboardVenuesRoute,
   DashboardIndexRoute: DashboardIndexRoute,
 }
 

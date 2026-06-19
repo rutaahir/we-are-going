@@ -156,6 +156,7 @@ class Member(models.Model):
     email_verified = models.BooleanField(default=True)
     joined_date = models.DateField(auto_now_add=True)
     aadhaar = models.CharField(max_length=12, blank=True)
+    aadhaar_photo = models.ImageField(upload_to='aadhaar_photos/', null=True, blank=True)
     aadhaar_status = models.CharField(max_length=50, default='Pending')
     role = models.CharField(max_length=50, choices=ROLES, default='member')
     custom_role = models.ForeignKey('Role', on_delete=models.SET_NULL, null=True, blank=True, related_name='members')
@@ -1332,3 +1333,341 @@ class MessageReaction(models.Model):
     def __str__(self):
         return f"{self.member.name} reacted {self.emoji} to message {self.message.id}"
 
+
+# =========================================================
+# PHASE 1 & 2: PROPERTY & RESOURCE SETUP
+# =========================================================
+class BookingProperty(models.Model):
+    PROPERTY_TYPES = (
+        ('Marriage Hall', 'Marriage Hall'),
+        ('Community Hall', 'Community Hall'),
+        ('Guest House', 'Guest House'),
+        ('Dharamshala', 'Dharamshala'),
+        ('Rooms', 'Rooms'),
+        ('Parking', 'Parking'),
+        ('Kitchen', 'Kitchen'),
+        ('Conference Hall', 'Conference Hall'),
+        ('Garden', 'Garden'),
+        ('Community Center', 'Community Center'),
+        ('Clubhouse', 'Clubhouse'),
+        ('Other', 'Other')
+    )
+    OWNERSHIP_CHOICES = (
+        ('Community Owned', 'Community Owned'),
+        ('Rented', 'Rented')
+    )
+    STATUS_CHOICES = (
+        ('Draft', 'Draft'),
+        ('Pending Approval', 'Pending Approval'),
+        ('Approved', 'Approved'),
+        ('Rejected', 'Rejected'),
+        ('Inactive', 'Inactive')
+    )
+
+    community = models.ForeignKey(Community, on_delete=models.CASCADE, related_name='booking_properties')
+    name = models.CharField(max_length=255)
+    property_type = models.CharField(max_length=50, choices=PROPERTY_TYPES, default='Community Center')
+    description = models.TextField(blank=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Pending Approval')
+    ownership = models.CharField(max_length=50, choices=OWNERSHIP_CHOICES, default='Community Owned')
+    rejection_reason = models.TextField(blank=True, default='')
+    notified = models.BooleanField(default=False)
+
+    # Location
+    address = models.TextField()
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    country = models.CharField(max_length=100, default='India')
+    pincode = models.CharField(max_length=20)
+    google_map_url = models.URLField(max_length=500, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    # Contact
+    contact_person_name = models.CharField(max_length=255)
+    contact_phone = models.CharField(max_length=50)
+    alternate_phone = models.CharField(max_length=50, blank=True, default='')
+    contact_email = models.EmailField(blank=True, null=True)
+
+    # Media
+    photos = models.JSONField(default=list, blank=True)  # List of URLs
+    videos = models.JSONField(default=list, blank=True)
+    brochure_pdf = models.FileField(upload_to='property_brochures/', null=True, blank=True)
+
+    # Rules & Amenities
+    rules = models.TextField(blank=True, help_text="Free text rules e.g. No alcohol, No loud music after 10 PM")
+    amenities = models.JSONField(default=list, blank=True) # e.g. ["Parking", "Kitchen", "Garden", "WiFi", "AC"]
+
+    # Policies
+    cancellation_allowed = models.BooleanField(default=True)
+    cancellation_hours = models.IntegerField(default=24)
+    refund_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=100.00)
+    refund_policy_tiers = models.JSONField(default=list, blank=True)
+    security_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    approval_required = models.BooleanField(default=True)
+    manual_payment_allowed = models.BooleanField(default=True)
+
+    # Notes
+    terms_conditions = models.TextField(blank=True, default='')
+    internal_notes = models.TextField(blank=True, default='')
+
+    # Booking Rules
+    booking_window_days = models.IntegerField(default=365, help_text="Up to how many days in advance")
+    min_booking_duration_hours = models.IntegerField(default=2)
+    max_booking_duration_days = models.IntegerField(default=7)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.community.name}"
+
+
+class PropertyResource(models.Model):
+    BOOKING_TYPES = (
+        ('Hourly', 'Hourly'),
+        ('Half Day', 'Half Day'),
+        ('Full Day', 'Full Day'),
+        ('Fixed', 'Fixed'),
+        ('Custom', 'Custom')
+    )
+    STATUS_CHOICES = (
+        ('Active', 'Active'),
+        ('Inactive', 'Inactive'),
+        ('Maintenance', 'Maintenance')
+    )
+
+    property = models.ForeignKey(BookingProperty, on_delete=models.CASCADE, related_name='resources')
+    name = models.CharField(max_length=255)
+    resource_type = models.CharField(max_length=100, help_text="e.g. Main Hall, Room, Kitchen, Parking")
+    capacity = models.IntegerField(default=0)
+    description = models.TextField(blank=True)
+    
+    media = models.JSONField(default=list, blank=True) # URLs
+    
+    booking_type = models.CharField(max_length=50, choices=BOOKING_TYPES, default='Full Day')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
+
+    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    half_day_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    full_day_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    security_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    min_booking_duration_hours = models.IntegerField(default=1)
+    max_booking_duration_hours = models.IntegerField(default=24)
+    setup_buffer_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    cleanup_buffer_hours = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.property.name})"
+
+class ResourceDependency(models.Model):
+    resource = models.ForeignKey(PropertyResource, on_delete=models.CASCADE, related_name='dependencies')
+    requires = models.ForeignKey(PropertyResource, on_delete=models.CASCADE, related_name='required_by')
+
+    def __str__(self):
+        return f"{self.resource.name} requires {self.requires.name}"
+
+
+# =========================================================
+# PHASE 3: PRICING CONFIGURATION
+# =========================================================
+class ResourcePricing(models.Model):
+    MEMBER_TYPES = (
+        ('VIP', 'VIP'),
+        ('Verified Member', 'Verified Member'),
+        ('Non Member', 'Non Member'),
+        ('Committee', 'Committee')
+    )
+    SEASONALITY = (
+        ('Weekdays', 'Weekdays'),
+        ('Weekends', 'Weekends'),
+        ('Festivals', 'Festivals'),
+        ('Seasonal', 'Seasonal'),
+        ('Standard', 'Standard')
+    )
+
+    resource = models.ForeignKey(PropertyResource, on_delete=models.CASCADE, related_name='pricing')
+    member_type = models.CharField(max_length=50, choices=MEMBER_TYPES, default='Non Member')
+    seasonality = models.CharField(max_length=50, choices=SEASONALITY, default='Standard')
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    def __str__(self):
+        return f"{self.resource.name} - {self.member_type} ({self.seasonality}): {self.price}"
+
+
+# =========================================================
+# PHASE 4: AVAILABILITY MANAGEMENT & LOCKING
+# =========================================================
+class ResourceLock(models.Model):
+    resource = models.ForeignKey(PropertyResource, on_delete=models.CASCADE, related_name='locks')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    locked_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def is_valid(self):
+        from django.utils import timezone
+        return timezone.now() < self.expires_at
+
+
+# =========================================================
+# PHASE 5 TO 9: BOOKING FLOW & CHECK-IN
+# =========================================================
+class VenueBooking(models.Model):
+    PAYMENT_STATUSES = (
+        ('Pending', 'Pending'),
+        ('Under Review', 'Under Review'),
+        ('Paid', 'Paid'),
+        ('Rejected', 'Rejected'),
+        ('Refunded', 'Refunded')
+    )
+    BOOKING_STATUSES = (
+        ('Draft', 'Draft'),
+        ('Pending Approval', 'Pending Approval'),
+        ('Pending Payment', 'Pending Payment'),
+        ('Confirmed', 'Confirmed'), # After Paid
+        ('Checked In', 'Checked In'),
+        ('Completed', 'Completed'),
+        ('Cancelled', 'Cancelled'),
+        ('Refund Requested', 'Refund Requested'),
+        ('Refunded', 'Refunded'),
+        ('Rejected', 'Rejected')
+    )
+    PAYMENT_METHODS = (
+        ('Cash', 'Cash'),
+        ('UPI', 'UPI'),
+        ('Bank Transfer', 'Bank Transfer'),
+    )
+
+    booking_number = models.CharField(max_length=50, unique=True, blank=True)
+    invoice_number = models.CharField(max_length=50, unique=True, blank=True)
+    receipt_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    property = models.ForeignKey(BookingProperty, on_delete=models.CASCADE, related_name='bookings')
+    resources = models.ManyToManyField(PropertyResource, related_name='bookings')
+    is_full_property = models.BooleanField(default=False)
+    member = models.ForeignKey(Member, on_delete=models.SET_NULL, null=True, blank=True, related_name='venue_bookings')
+
+    
+    # Event Details
+    event_name = models.CharField(max_length=255)
+    event_type = models.CharField(max_length=100)
+    purpose = models.CharField(max_length=255, blank=True)
+    expected_guests = models.IntegerField(default=0)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    
+    # Guest details (if booked by someone else or non-member)
+    guest_name = models.CharField(max_length=255, blank=True)
+    guest_email = models.EmailField(blank=True, null=True)
+    guest_phone = models.CharField(max_length=20, blank=True)
+
+    # Documents
+    id_proof = models.FileField(upload_to='booking_docs/', null=True, blank=True)
+    invitation_card = models.FileField(upload_to='booking_docs/', null=True, blank=True)
+    approval_letter = models.FileField(upload_to='booking_docs/', null=True, blank=True)
+
+    # Pricing
+    base_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    extra_charges = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    deposit_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    pricing_breakdown = models.JSONField(default=dict, blank=True)
+
+    # Status
+    status = models.CharField(max_length=50, choices=BOOKING_STATUSES, default='Pending Approval')
+    payment_status = models.CharField(max_length=50, choices=PAYMENT_STATUSES, default='Pending')
+
+    # Payment details
+    payment_method = models.CharField(max_length=50, choices=PAYMENT_METHODS, blank=True, default='')
+    payment_screenshot = models.ImageField(upload_to='booking_payments/', null=True, blank=True)
+    payment_reference = models.CharField(max_length=255, blank=True)
+    payment_verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_venue_payments')
+
+    # QR and Check-in
+    qr_code_data = models.CharField(max_length=500, blank=True)
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.booking_number:
+            import uuid
+            import datetime
+            year = datetime.datetime.now().year
+            self.booking_number = f"BK-{year}-{uuid.uuid4().hex[:6].upper()}"
+        if not self.invoice_number:
+            self.invoice_number = f"INV-{self.booking_number.replace('BK-', '')}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.booking_number} - {self.event_name}"
+
+
+# =========================================================
+# PHASE 10 & 11: EVENT COMPLETION, INSPECTION & DEPOSITS
+# =========================================================
+class BookingInspection(models.Model):
+    DEPOSIT_STATUSES = (
+        ('Pending', 'Pending'),
+        ('Full Refund', 'Full Refund'),
+        ('Partial Refund', 'Partial Refund'),
+        ('Forfeited', 'Forfeited')
+    )
+
+    booking = models.OneToOneField(VenueBooking, on_delete=models.CASCADE, related_name='inspection')
+    
+    damage_found = models.BooleanField(default=False)
+    cleaning_required = models.BooleanField(default=False)
+    extra_electricity_used = models.BooleanField(default=False)
+    equipment_damage = models.BooleanField(default=False)
+    
+    cleaning_charges = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    damage_charges = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    electricity_charges = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    
+    total_additional_charges = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    
+    deposit_settlement_status = models.CharField(max_length=50, choices=DEPOSIT_STATUSES, default='Pending')
+    settlement_notes = models.TextField(blank=True)
+    
+    inspected_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        self.total_additional_charges = self.cleaning_charges + self.damage_charges + self.electricity_charges
+        super().save(*args, **kwargs)
+
+
+# =========================================================
+# PHASE 12 & 13: CANCELLATIONS, REFUNDS & WAITING LIST
+# =========================================================
+class BookingRefund(models.Model):
+    booking = models.ForeignKey(VenueBooking, on_delete=models.CASCADE, related_name='refunds')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.TextField()
+    refund_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    status = models.CharField(max_length=50, choices=(('Requested', 'Requested'), ('Approved', 'Approved'), ('Rejected', 'Rejected'), ('Processed', 'Processed')), default='Requested')
+    processed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class BookingWaitingList(models.Model):
+    property = models.ForeignKey(BookingProperty, on_delete=models.CASCADE)
+    resource = models.ForeignKey(PropertyResource, on_delete=models.CASCADE, null=True, blank=True)
+    member = models.ForeignKey(Member, on_delete=models.CASCADE)
+    
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    
+    position = models.IntegerField(default=1)
+    notified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)

@@ -1,4 +1,6 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useTranslation } from "@/hooks/useTranslation";
+import { useLanguage } from "@/context/LanguageContext";
 import { useState, useEffect, useMemo, useRef, type TouchEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -26,9 +28,9 @@ export const Route = createFileRoute("/")({
   },
   head: () => ({
     meta: [
-      { title: "We Are Samaj — Apni Samaj, Apna Network" },
+      { title: "WE ARE UNITED — Apni Samaj, Apna Network" },
       { name: "description", content: "Community ERP and social network for Indian samaj communities — manage members, events, matrimony, jobs and donations on one platform." },
-      { property: "og:title", content: "We Are Samaj — Connect Your Samaj Digitally" },
+      { property: "og:title", content: "WE ARE UNITED — Connect Your Samaj Digitally" },
     ]
   }),
   component: DashboardStyleHome,
@@ -46,18 +48,350 @@ const sidebarItems = [
   { label: "Donations", icon: HandHeart },
   { label: "Gallery", icon: ImageIcon },
   { label: "Videos", icon: Video },
-  { label: "Documents", icon: FileText },
-  { label: "My Network", icon: Network },
-  { label: "Settings", icon: Settings }
+  { label: "Documents", icon: FileText }
 ];
 
+const BIZ_CATEGORIES = [
+  "All", "Food & Bakery", "Manufacturing", "Jewellery", "Healthcare",
+  "Textile", "Construction", "Automobile", "Professional",
+  "Education", "Technology", "Retail", "Agriculture", "Finance", "Transport", "Other"
+];
+
+function memberToBizCard(m: any): any {
+  return {
+    _source: "member",
+    id: `m_${m.id}`,
+    name: m.business_name || m.name,
+    category: m.business_category || "Other",
+    owner: m.name,
+    phone: m.phone || "",
+    email: m.email || "",
+    city: m.district || m.village || "",
+    state: m.state || "Gujarat",
+    gst_no: m.gst_no || "",
+    business_years: m.business_years || "",
+    desc: m.business_category
+      ? `${m.business_category} business by ${m.name}, ${m.village || m.district || "Gujarat"}.`
+      : `Community member business by ${m.name}.`,
+    verified: m.status === "Verified" || m.status === "Active",
+    img: m.avatar || null,
+    img_url: m.avatar_url || null,
+    rating: 0,
+    member_id: m.id,
+  };
+}
+
+function BusinessDirectorySection({ t }: { t: (k: string) => string }) {
+  const [businesses, setBusinesses] = useState<any[]>([]);
+  const [memberBiz, setMemberBiz] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [tab, setTab] = useState<"all" | "listed" | "members">("all");
+  const [openCard, setOpenCard] = useState<any | null>(null);
+  const [carouselIdx, setCarouselIdx] = useState(0);
+
+  useEffect(() => {
+    setCarouselIdx(0);
+  }, [openCard]);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.allSettled([
+      api.getBusinesses({}),
+      api.getMembers({ profession_type: "Business" }),
+    ]).then(([bizRes, memRes]) => {
+      if (bizRes.status === "fulfilled") {
+        const visible = (bizRes.value || []).filter(
+          (b: any) => b.status !== "REJECTED" && b.status !== "SUSPENDED" &&
+            (b.verified || b.status === "VERIFIED" || b.status === undefined || b.status === "PENDING")
+        );
+        setBusinesses(visible);
+      }
+      if (memRes.status === "fulfilled") {
+        const bm = (memRes.value || [])
+          .filter((m: any) => m.profession_type === "Business" && m.business_name)
+          .map(memberToBizCard);
+        setMemberBiz(bm);
+      }
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const combined = (() => {
+    let src: any[] = [];
+    if (tab === "listed") src = businesses;
+    else if (tab === "members") src = memberBiz;
+    else {
+      const names = new Set(businesses.map((b: any) => b.name?.toLowerCase()));
+      src = [...businesses, ...memberBiz.filter((m: any) => !names.has(m.name?.toLowerCase()))];
+    }
+    return src.filter((b: any) => {
+      const q = search.toLowerCase();
+      const matchSearch = !q || (b.name || "").toLowerCase().includes(q) || (b.owner || "").toLowerCase().includes(q) || (b.category || "").toLowerCase().includes(q);
+      const matchCat = category === "All" || b.category === category;
+      return matchSearch && matchCat;
+    });
+  })();
+
+  const getImg = (b: any) => b.img || b.img_url || b.cover || b.cover_url || "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=600&auto=format&fit=crop";
+
+  return (
+    <motion.div key="business" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-5 text-left">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h2 className="text-2xl font-bold text-[#3E2723]">{t("sidebar.businessDirectory")}</h2>
+          <p className="text-xs text-warm-muted mt-0.5">Discover businesses & entrepreneurs from our samaj community</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full font-bold">{businesses.length} Listed</span>
+          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full font-bold">{memberBiz.length} Member</span>
+        </div>
+      </div>
+
+      {/* Search + Filter */}
+      <div className="bg-white border border-[#EBE3DB] rounded-2xl p-4 shadow-sm space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search business name, owner, or category..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316] text-sm"
+          />
+        </div>
+        {/* Category Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          {BIZ_CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setCategory(cat)}
+              className={`px-3.5 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition border ${
+                category === cat
+                  ? "bg-[#F97316] text-white border-[#F97316]"
+                  : "border-[#EBE3DB] text-[#5C4033] bg-[#FFF8F2] hover:bg-[#FDF2E9]"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+        {/* Tabs */}
+        <div className="flex items-center gap-2 pt-1 border-t border-[#F3E8DE]">
+          {(["all", "listed", "members"] as const).map(tb => (
+            <button
+              key={tb}
+              onClick={() => setTab(tb)}
+              className={`px-4 py-1.5 rounded-lg text-[11px] font-bold transition border ${
+                tab === tb
+                  ? "bg-[#3E2723] text-white border-[#3E2723]"
+                  : "border-[#EBE3DB] text-[#5C4033] hover:bg-[#FAF3EC]"
+              }`}
+            >
+              {tb === "all" ? "All" : tb === "listed" ? "Directory Listings" : "Member Businesses"}
+            </button>
+          ))}
+          <span className="ml-auto text-[11px] text-warm-muted font-medium">{combined.length} result{combined.length !== 1 ? "s" : ""}</span>
+        </div>
+      </div>
+
+      {/* Cards Grid */}
+      {loading ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden animate-pulse shadow-sm">
+              <div className="h-32 bg-[#F3E8DE]" />
+              <div className="p-4 space-y-2">
+                <div className="h-3 w-16 bg-[#F3E8DE] rounded" />
+                <div className="h-4 w-3/4 bg-[#F3E8DE] rounded" />
+                <div className="h-3 w-1/2 bg-[#F3E8DE] rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : combined.length === 0 ? (
+        <div className="bg-white border border-[#EBE3DB] rounded-2xl p-12 text-center shadow-sm">
+          <Building2 className="w-10 h-10 text-[#F97316] mx-auto mb-3 opacity-50" />
+          <h3 className="font-bold text-[#3E2723] text-base">No businesses found</h3>
+          <p className="text-xs text-warm-muted mt-1">Try adjusting your search or category filter</p>
+          <button onClick={() => { setSearch(""); setCategory("All"); setTab("all"); }} className="mt-4 px-5 py-2 bg-[#F97316] text-white text-xs font-bold rounded-xl hover:bg-[#EA580C] transition">
+            Clear Filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {combined.map((b: any) => (
+            <div
+              key={b.id}
+              onClick={() => setOpenCard(b)}
+              className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden flex flex-col hover:shadow-lg transition-all duration-300 cursor-pointer group shadow-sm"
+            >
+              <div className="relative h-36 overflow-hidden bg-[#FAF3EC]">
+                <img src={getImg(b)} alt={b.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                  <span className="text-[9px] uppercase tracking-wider bg-black/60 text-amber-300 px-2 py-0.5 rounded-full font-bold border border-amber-400/30">
+                    {b.category}
+                  </span>
+                  {b._source === "member" && (
+                    <span className="text-[9px] uppercase tracking-wider bg-blue-600/80 text-white px-2 py-0.5 rounded-full font-bold">Member</span>
+                  )}
+                </div>
+                {(b.verified || b.status === "VERIFIED") && (
+                  <div className="absolute top-2.5 right-2.5 bg-emerald-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-400">✓ Verified</div>
+                )}
+              </div>
+              <div className="p-4 flex-1 flex flex-col justify-between">
+                <div className="space-y-1">
+                  <h3 className="font-bold text-sm text-[#3E2723] line-clamp-1 group-hover:text-[#F97316] transition-colors">{b.name}</h3>
+                  <p className="text-[10px] text-warm-muted">Owner: <span className="font-semibold text-[#5C4033]">{b.owner || "—"}</span></p>
+                  <p className="text-[10px] text-warm-muted line-clamp-2 min-h-[28px]">{b.desc || "No description available."}</p>
+                </div>
+                <div className="flex gap-2 pt-3 mt-2 border-t border-[#F3E8DE]">
+                  {b.phone && (
+                    <a href={`https://wa.me/${b.phone}`} target="_blank" rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="flex-1 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold text-center hover:bg-emerald-100 transition"
+                    >
+                      WhatsApp
+                    </a>
+                  )}
+                  <button className="flex-1 py-1.5 rounded-lg bg-[#FFF5EE] border border-[#F3E8DE] text-[#F97316] text-[10px] font-bold hover:bg-[#FDF2E9] transition">
+                    View Details
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {openCard && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setOpenCard(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="relative h-44">
+              <img src={getImg(openCard)} alt="" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+              <button onClick={() => setOpenCard(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition">✕</button>
+              <div className="absolute bottom-3 left-4">
+                <span className="text-[9px] uppercase font-bold bg-[#F97316] text-white px-2.5 py-0.5 rounded-full">{openCard.category}</span>
+                {openCard._source === "member" && <span className="ml-1.5 text-[9px] uppercase font-bold bg-blue-600 text-white px-2.5 py-0.5 rounded-full">Member Business</span>}
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <h2 className="font-bold text-lg text-[#3E2723]">{openCard.name}</h2>
+                <p className="text-xs text-warm-muted">Owner: <span className="font-semibold text-[#5C4033]">{openCard.owner}</span></p>
+              </div>
+              <p className="text-xs text-[#5C4033] leading-relaxed bg-[#FAF3EC] p-3 rounded-xl">{openCard.desc}</p>
+              
+              {/* Gallery List */}
+              {(() => {
+                const galleryList: string[] = [];
+                if (openCard.gallery) {
+                  if (Array.isArray(openCard.gallery)) {
+                    galleryList.push(...openCard.gallery);
+                  } else if (typeof openCard.gallery === "string") {
+                    try {
+                      const parsed = JSON.parse(openCard.gallery);
+                      if (Array.isArray(parsed)) galleryList.push(...parsed);
+                    } catch (_) {}
+                  }
+                }
+                if (galleryList.length === 0) return null;
+                return (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Business Gallery</span>
+                    
+                    {/* Large display */}
+                    <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-[#EBE3DB] bg-[#FAF3EC] shadow-sm group">
+                      <img
+                        src={getImageUrl(galleryList[carouselIdx] || galleryList[0])}
+                        alt=""
+                        className="w-full h-full object-cover transition-all duration-300"
+                      />
+                      {galleryList.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setCarouselIdx(prev => (prev === 0 ? galleryList.length - 1 : prev - 1))}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/80 hover:bg-white text-slate-800 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity active:scale-95"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCarouselIdx(prev => (prev === galleryList.length - 1 ? 0 : prev + 1))}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/80 hover:bg-white text-slate-800 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity active:scale-95"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                      <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-[9px] font-bold">
+                        {(carouselIdx % galleryList.length) + 1} / {galleryList.length}
+                      </div>
+                    </div>
+
+                    {/* Small thumbnails */}
+                    {galleryList.length > 1 && (
+                      <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
+                        {galleryList.map((g, idx) => {
+                          const isActive = (carouselIdx % galleryList.length) === idx;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setCarouselIdx(idx)}
+                              className={`w-14 h-10 rounded-lg overflow-hidden border shrink-0 transition-all ${
+                                isActive ? "border-[#F97316] ring-2 ring-[#F97316]/20 scale-95" : "border-[#EBE3DB] opacity-70 hover:opacity-100"
+                              }`}
+                            >
+                              <img src={getImageUrl(g)} alt="" className="w-full h-full object-cover" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {openCard.city && <div className="bg-[#FFF8F2] rounded-xl p-2.5"><span className="text-warm-muted block">City</span><strong className="text-[#3E2723]">{openCard.city}</strong></div>}
+                {openCard.state && <div className="bg-[#FFF8F2] rounded-xl p-2.5"><span className="text-warm-muted block">State</span><strong className="text-[#3E2723]">{openCard.state}</strong></div>}
+                {openCard.gst_no && <div className="bg-[#FFF8F2] rounded-xl p-2.5"><span className="text-warm-muted block">GST No.</span><strong className="text-[#3E2723]">{openCard.gst_no}</strong></div>}
+                {openCard.business_years && <div className="bg-[#FFF8F2] rounded-xl p-2.5"><span className="text-warm-muted block">Years in Business</span><strong className="text-[#3E2723]">{openCard.business_years}</strong></div>}
+              </div>
+              <div className="flex gap-2 pt-1">
+                {openCard.phone && (
+                  <a href={`https://wa.me/${openCard.phone}`} target="_blank" rel="noopener noreferrer"
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-white text-xs font-bold text-center hover:bg-emerald-600 transition"
+                  >WhatsApp</a>
+                )}
+                {openCard.phone && (
+                  <a href={`tel:${openCard.phone}`}
+                    className="flex-1 py-2.5 rounded-xl bg-[#F97316] text-white text-xs font-bold text-center hover:bg-[#EA580C] transition"
+                  >Call Now</a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 function DashboardStyleHome() {
+  const { t } = useTranslation();
   const { page } = Route.useSearch();
   const navigate = useNavigate();
 
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [selectedCity, setSelectedCity] = useState("Ahmedabad");
-  const [lang, setLang] = useState("EN");
+  const { language, setLanguage } = useLanguage();
   const [samacharPaused, setSamacharPaused] = useState(false);
   const [jobsPaused, setJobsPaused] = useState(false);
   const [partnerIndex, setPartnerIndex] = useState(0);
@@ -200,15 +534,6 @@ function DashboardStyleHome() {
   const [dirLocation, setDirLocation] = useState("All Locations");
 
   const visibleJobs = (jobList.length ? jobList : DASHBOARD_JOBS).slice(0, 4);
-  const newsFeed = useMemo(() => {
-    return news.length > 0 ? news.map((n: any) => ({
-      id: n.id,
-      title: n.title,
-      img: n.img || n.img_url,
-      location: n.location || "Gujarat",
-      time: n.time || (n.created_at ? new Date(n.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "Just now")
-    })) : SAMACHAR_ITEMS;
-  }, [news]);
   const quickAccessItems = sidebarItems
     .filter((item) => ["Samachar", "Matrimony", "Jobs", "Events", "Directory", "Gallery", "Videos", "Donations"].includes(item.label))
     .map((item, index) => ({
@@ -295,18 +620,6 @@ function DashboardStyleHome() {
     };
 
     loadData();
-  }, []);
-
-  useEffect(() => {
-    const handleUpdate = () => {
-      console.log("\n[COMPONENT REFRESHED]\nCommunity Card\n");
-      api.getCommunities().then(res => {
-        setCommunities(res);
-        setCommunityList(res.map(c => ({ ...c, joined: false, member_count: c.member_count || 150 })));
-      });
-    };
-    window.addEventListener("community-updated", handleUpdate);
-    return () => window.removeEventListener("community-updated", handleUpdate);
   }, []);
 
   const downloadReceiptPdf = (receipt: any) => {
@@ -403,7 +716,7 @@ function DashboardStyleHome() {
               <path d="M14 19 L18 23 L26 14" fill="none" stroke="#FFF5EE" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <div className="leading-tight text-left">
-              <div className="font-ui font-bold text-base text-[#3E2723] tracking-tight">We Are Samaj</div>
+              <div className="font-ui font-bold text-base text-[#3E2723] tracking-tight">WE ARE UNITED</div>
               <div className="text-[10px] text-warm-muted -mt-0.5 font-medium">Apni Samaj, Apna Network</div>
             </div>
           </Link>
@@ -417,8 +730,8 @@ function DashboardStyleHome() {
                   key={item.label}
                   onClick={() => handleNavClick(item.label)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative ${active
-                      ? "bg-[#FDF2E9] text-[#F97316] font-bold shadow-sm"
-                      : "text-[#5C4033] hover:bg-[#F3E8DE]/60 hover:text-[#3E2723]"
+                    ? "bg-[#FDF2E9] text-[#F97316] font-bold shadow-sm"
+                    : "text-[#5C4033] hover:bg-[#F3E8DE]/60 hover:text-[#3E2723]"
                     }`}
                 >
                   {active && (
@@ -429,7 +742,7 @@ function DashboardStyleHome() {
                     />
                   )}
                   <item.icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${active ? "text-[#F97316]" : "text-[#8C6D58]"}`} />
-                  <span>{item.label}</span>
+                  <span>{t("sidebar." + item.label.charAt(0).toLowerCase() + item.label.slice(1).replace(/\s+/g, ""))}</span>
                 </button>
               );
             })}
@@ -442,12 +755,12 @@ function DashboardStyleHome() {
             <div className="absolute -top-3 -right-3 w-10 h-10 bg-white/5 rounded-full flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-[#F97316]/60" />
             </div>
-            <h4 className="font-semibold text-xs text-white tracking-wide">Upgrade to Premium</h4>
+            <h4 className="font-semibold text-xs text-white tracking-wide">{t("sidebar.upgradeToPremium")}</h4>
             <p className="text-[10px] text-white/70 mt-1 leading-relaxed">
-              Get more visibility, premium features & much more.
+              {t("sidebar.upgradeDesc")}
             </p>
             <button onClick={() => handleNavClick("Subscription")} className="w-full mt-3 py-2 rounded-xl bg-[#F97316] text-white text-xs font-bold hover:bg-[#EA580C] transition duration-300 shadow-lg shadow-[#F97316]/20">
-              Upgrade Now
+              {t("sidebar.upgradeNow")}
             </button>
           </div>
         </div>
@@ -462,7 +775,7 @@ function DashboardStyleHome() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
             <input
               type="text"
-              placeholder="Search communities, news, events, members..."
+              placeholder={t("header.searchPlaceholder")}
               className="w-full pl-9 pr-12 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316] text-[#3E2723] placeholder-[#8C6D58]/60 transition duration-200"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-[#8C6D58]/60 bg-[#FAF3EC] border border-[#EBE3DB] px-1.5 py-0.5 rounded font-mono select-none">
@@ -494,11 +807,11 @@ function DashboardStyleHome() {
 
             {/* LanguageSelector */}
             <div className="flex items-center gap-1 bg-[#FFF8F2] border border-[#EBE3DB] rounded-full p-0.5 shadow-2xs">
-              {(["EN", "GU", "HI"] as const).map(l => (
+              {(["en", "gu", "hi"] as const).map(l => (
                 <button
                   key={l}
-                  onClick={() => setLang(l)}
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition duration-200 ${lang === l ? "bg-[#F97316] text-white" : "text-[#8C6D58] hover:text-[#3E2723]"
+                  onClick={() => setLanguage(l)}
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition duration-200 uppercase ${language === l ? "bg-[#F97316] text-white" : "text-[#8C6D58] hover:text-[#3E2723]"
                     }`}
                 >
                   {l}
@@ -515,52 +828,28 @@ function DashboardStyleHome() {
             </button>
 
             {/* User avatar + Hi, Rajesh */}
+            {/* User avatar + Hi, Rajesh */}
             <div className="relative">
-              <button
-                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="flex items-center gap-2 border-l border-[#EBE3DB] pl-4 hover:opacity-85 transition duration-200 cursor-pointer"
-              >
-                <img
-                  src={userProfile.avatar}
-                  alt="Profile"
-                  className="w-8 h-8 rounded-full object-cover border border-[#F97316] shadow-sm"
-                />
-                <div className="hidden md:block leading-tight text-left">
-                  <div className="text-xs font-bold text-[#3E2723]">Hi, {userProfile.name.split(" ")[0]}</div>
-                  <div className="text-[9px] text-[#F97316] font-semibold flex items-center gap-0.5">
-                    {userProfile.membership} <ChevronDown className="w-2.5 h-2.5 ml-0.5" />
-                  </div>
-                </div>
-              </button>
-
-              {showProfileDropdown && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setShowProfileDropdown(false)} />
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-[#EBE3DB] rounded-2xl shadow-xl py-2 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <button
-                      onClick={() => {
-                        handleNavClick("Settings");
-                        setShowProfileDropdown(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-xs font-semibold text-[#3E2723] hover:bg-[#FFF8F2] hover:text-[#F97316] flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <User className="w-3.5 h-3.5 text-[#F97316]" />
-                      My Profile
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowProfileDropdown(false);
-                        toast.info("Logged out successfully");
-                        window.location.href = "/login";
-                      }}
-                      className="w-full text-left px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5 text-red-500" />
-                      Logout
-                    </button>
-                  </div>
-                </>
-              )}
+              <div className="flex items-center gap-2">
+    <button
+                  onClick={() => {
+                    // Implement login navigation or modal here
+                    window.location.href = "/login";
+                  }}
+                  className="px-3 py-1 rounded-md bg-[#F97316] text-white text-sm font-semibold hover:bg-[#EA580C] transition"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => {
+                    // Implement register navigation or modal here
+                    window.location.href = "/register";
+                  }}
+                  className="px-3 py-1 rounded-md border border-[#F97316] text-[#F97316] text-sm font-semibold hover:bg-[#F97316]/10 transition"
+                >
+                  Register
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -585,20 +874,19 @@ function DashboardStyleHome() {
                     <div className="relative z-10 w-full grid grid-cols-1 md:grid-cols-[1.2fr_0.8fr] gap-6 items-center">
                       <div className="space-y-4 text-left">
                         <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#3E2723] leading-tight">
-                          Connect. Empower. Grow.<br />
-                          <span className="text-[#F97316]">Stronger Together!</span>
+                          {t("banner.title")}
                         </h2>
                         <p className="text-xs text-[#5C4033]/85 max-w-sm leading-relaxed font-medium">
-                          Your one-stop platform for news, events, community, matrimony, jobs & everything in between.
+                          {t("banner.desc")}
                         </p>
                       </div>
 
                       <div className="flex flex-row md:justify-end items-center gap-2 sm:gap-3 w-full">
                         <button onClick={() => handleNavClick("Communities")} className="px-3 sm:px-5 py-2.5 text-[10px] sm:text-xs rounded-xl bg-gradient-to-r from-[#F97316] to-[#EA580C] text-white font-bold hover:shadow-lg hover:shadow-[#F97316]/20 transition-all duration-300 transform active:scale-95 cursor-pointer whitespace-nowrap text-center">
-                          Explore Communities
+                          {t("banner.explore")}
                         </button>
                         <Link to="/register/community" className="px-3 sm:px-5 py-2.5 text-[10px] sm:text-xs rounded-xl border border-[#F97316] text-[#F97316] hover:bg-[#F97316] hover:text-white font-bold transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-1 bg-white/70 backdrop-blur-xs shadow-2xs whitespace-nowrap">
-                          <Plus className="w-3.5 h-3.5" /> Register Your Community
+                          <Plus className="w-3.5 h-3.5" /> {t("banner.register")}
                         </Link>
                       </div>
                     </div>
@@ -612,9 +900,9 @@ function DashboardStyleHome() {
                       {/* Latest Samachar */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Latest Samachar</h3>
+                          <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.latestSamachar")}</h3>
                           <button onClick={() => handleNavClick("Samachar")} className="text-xs font-bold text-[#F97316] hover:text-[#EA580C] transition flex items-center gap-0.5">
-                            View All <ArrowRight className="w-3.5 h-3.5" />
+                            {t("dashboardindex.viewAll")} <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         <div className="rounded-[24px] border border-[#EBE3DB] bg-white/90 shadow-sm p-3 overflow-hidden">
@@ -627,16 +915,16 @@ function DashboardStyleHome() {
                               transform: 'translate3d(0,0,0)',
                             }}
                           >
-                            {[...newsFeed, ...newsFeed].map((item, idx) => (
+                            {[...SAMACHAR_ITEMS, ...SAMACHAR_ITEMS].map((item, idx) => (
                               <article key={`${item.id}-${idx}`} onMouseEnter={() => setSamacharPaused(true)} onMouseLeave={() => setSamacharPaused(false)} onClick={() => setSelectedNews(item)} className="group w-64 bg-[#FFFDFB] rounded-2xl border border-[#EBE3DB]/80 overflow-hidden shadow-sm hover:shadow-md hover:border-[#F97316]/35 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
                                 <div className="relative overflow-hidden h-24">
-                                  <img src={getImageUrl(item.img)} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                  <img src={item.img} alt={t(item.title)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                 </div>
                                 <div className="p-3.5 space-y-1.5 text-left">
-                                  <h4 className="text-xs font-bold leading-snug line-clamp-2 text-[#3E2723] group-hover:text-[#F97316] transition-colors duration-200">{item.title}</h4>
+                                  <h4 className="text-xs font-bold leading-snug line-clamp-2 text-[#3E2723] group-hover:text-[#F97316] transition-colors duration-200">{t(item.title)}</h4>
                                   <div className="flex items-center justify-between text-[10px] text-warm-muted pt-1 border-t border-[#FAF3EC]">
-                                    <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3 text-[#F97316]" />{item.location}</span>
-                                    <span>{item.time}</span>
+                                    <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3 text-[#F97316]" />{t(item.location)}</span>
+                                    <span>{t(item.time)}</span>
                                   </div>
                                 </div>
                               </article>
@@ -645,6 +933,7 @@ function DashboardStyleHome() {
                         </div>
                       </div>
 
+                      {/* Three Column Grid for Matrimony + Jobs + Quick Access */}
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         {/* Matrimony Widget */}
                         <motion.div
@@ -654,11 +943,11 @@ function DashboardStyleHome() {
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Find Your Life Partner</h3>
-                              <p className="text-[10px] text-[#8C6D58]">Swipe-style profile spotlight with elegant motion</p>
+                              <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.findYourLifePartner")}</h3>
+                              <p className="text-[10px] text-[#8C6D58]">{t("dashboardindex.findYourLifePartnerDesc")}</p>
                             </div>
                             <button onClick={() => handleNavClick("Matrimony")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5 cursor-pointer">
-                              View Profiles <ArrowRight className="w-3.5 h-3.5" />
+                              {t("dashboardindex.viewProfiles")} <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           </div>
 
@@ -676,26 +965,26 @@ function DashboardStyleHome() {
                                 <div className="relative flex items-start gap-4">
                                   <motion.img
                                     src={PARTNERS[partnerIndex].photo}
-                                    alt={PARTNERS[partnerIndex].name}
+                                    alt={t(PARTNERS[partnerIndex].name)}
                                     className="h-24 w-24 rounded-3xl object-cover border border-white shadow-md"
                                     animate={{ y: [0, -3, 0] }}
                                     transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
                                   />
                                   <div className="space-y-2 text-left">
-                                    <p className="text-[10px] uppercase tracking-[0.35em] text-[#F97316]">Featured Match</p>
-                                    <h4 className="text-base font-black text-[#3E2723]">{PARTNERS[partnerIndex].name}</h4>
-                                    <p className="text-[11px] text-[#7A6458]">{PARTNERS[partnerIndex].age} yrs · {PARTNERS[partnerIndex].location}</p>
-                                    <span className="inline-flex rounded-full bg-[#FFF1E7] px-2.5 py-1 text-[10px] font-bold text-[#F97316]">{PARTNERS[partnerIndex].profession}</span>
-                                    <p className="text-[10px] text-[#8C6D58]">Education: {PARTNERS[partnerIndex].education}</p>
+                                    <p className="text-[10px] uppercase tracking-[0.35em] text-[#F97316]">{t("dashboardindex.featuredMatch")}</p>
+                                    <h4 className="text-base font-black text-[#3E2723]">{t(PARTNERS[partnerIndex].name)}</h4>
+                                    <p className="text-[11px] text-[#7A6458]">{t(PARTNERS[partnerIndex].age.toString())} {t("yrs")} · {t(PARTNERS[partnerIndex].location)}</p>
+                                    <span className="inline-flex rounded-full bg-[#FFF1E7] px-2.5 py-1 text-[10px] font-bold text-[#F97316]">{t(PARTNERS[partnerIndex].profession)}</span>
+                                    <p className="text-[10px] text-[#8C6D58]">{t("Education")}: {t(PARTNERS[partnerIndex].education)}</p>
                                   </div>
                                 </div>
                                 <div className="mt-4 flex items-center justify-between gap-2 text-[10px] text-[#8C6D58]">
-                                  <span>Auto-swoops every 3.2s · hover to pause</span>
+                                  <span>{t("dashboardindex.autoSwoops")}</span>
                                   <button
                                     onClick={() => setPartnerIndex((prev) => (prev + 1) % PARTNERS.length)}
                                     className="rounded-full bg-[#F97316] px-3 py-1.5 font-bold text-white shadow-sm hover:bg-[#EA580C] transition"
                                   >
-                                    Next Match
+                                    {t("dashboardindex.nextMatch")}
                                   </button>
                                 </div>
                               </motion.article>
@@ -708,10 +997,10 @@ function DashboardStyleHome() {
                                   onClick={() => setPartnerIndex(i)}
                                   className={"flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition " + (partnerIndex === i ? "border-[#F97316] bg-[#FFF8F3] shadow-sm" : "border-[#EFE5DD] bg-white hover:border-[#F5D7C0]")}
                                 >
-                                  <img src={partner.photo} alt={partner.name} className="h-12 w-12 rounded-2xl object-cover" />
+                                  <img src={partner.photo} alt={t(partner.name)} className="h-12 w-12 rounded-2xl object-cover" />
                                   <div className="min-w-0">
-                                    <p className="text-[11px] font-bold text-[#3E2723] truncate">{partner.name}</p>
-                                    <p className="text-[10px] text-[#8C6D58] truncate">{partner.profession} · {partner.location}</p>
+                                    <p className="text-[11px] font-bold text-[#3E2723] truncate">{t(partner.name)}</p>
+                                    <p className="text-[10px] text-[#8C6D58] truncate">{t(partner.profession)} · {t(partner.location)}</p>
                                   </div>
                                   {partnerIndex === i && <Sparkles className="ml-auto h-4 w-4 text-[#F97316]" />}
                                 </button>
@@ -730,7 +1019,7 @@ function DashboardStyleHome() {
                                 />
                               ))}
                             </div>
-                            <span className="text-[10px] text-warm-muted">Profile {partnerIndex + 1} / {PARTNERS.length}</span>
+                            <span className="text-[10px] text-warm-muted">{t("Profile")} {partnerIndex + 1} / {PARTNERS.length}</span>
                           </div>
                         </motion.div>
 
@@ -743,11 +1032,11 @@ function DashboardStyleHome() {
                           <div className="flex-1 flex flex-col min-h-0 space-y-3 pb-1">
                             <div className="flex items-center justify-between">
                               <div>
-                                <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Jobs for You</h3>
-                                <p className="text-[10px] text-[#8C6D58]">Vertical auto-scroll ticker · pauses on hover</p>
+                                <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.jobsForYou")}</h3>
+                                <p className="text-[10px] text-[#8C6D58]">{t("dashboardindex.jobsDesc")}</p>
                               </div>
                               <button onClick={() => handleNavClick("Jobs")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5 cursor-pointer">
-                                View All <ArrowRight className="w-3.5 h-3.5" />
+                                {t("dashboardindex.viewAll")} <ArrowRight className="w-3.5 h-3.5" />
                               </button>
                             </div>
                             <style>{`@keyframes jobs-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }`}</style>
@@ -767,12 +1056,12 @@ function DashboardStyleHome() {
                                       </div>
                                       <div className="text-left leading-tight min-w-0">
                                         <h4 className="text-[11px] font-bold text-[#3E2723] truncate flex items-center gap-1">
-                                          {(job as any).role ?? (job as any).title ?? "Opportunity"}
+                                          {t((job as any).role ?? (job as any).title ?? "Opportunity")}
                                           {(job as any).isNew && (
-                                            <span className="bg-emerald-100 text-emerald-700 text-[7px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">New</span>
+                                            <span className="bg-emerald-100 text-emerald-700 text-[7px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">{t("New")}</span>
                                           )}
                                         </h4>
-                                        <p className="text-[9px] text-warm-muted truncate">{(job as any).company ?? (job as any).employer ?? "Community"} · {(job as any).location ?? ""}</p>
+                                        <p className="text-[9px] text-warm-muted truncate">{t((job as any).company ?? (job as any).employer ?? "Community")} · {t((job as any).location ?? "")}</p>
                                       </div>
                                     </div>
                                     <ArrowRight className="w-3.5 h-3.5 text-[#8C6D58] group-hover:text-[#F97316] transition-colors flex-shrink-0" />
@@ -782,7 +1071,7 @@ function DashboardStyleHome() {
                             </div>
                           </div>
                           <button onClick={() => setShowPostJob(true)} className="w-full py-2 rounded-xl border border-dashed border-[#F97316] text-[#F97316] text-xs font-bold hover:bg-orange-50/50 transition flex items-center justify-center gap-1 mt-1 cursor-pointer">
-                            <Plus className="w-3.5 h-3.5" /> Post a Job
+                            <Plus className="w-3.5 h-3.5" /> {t("dashboardindex.postJob")}
                           </button>
                         </motion.div>
 
@@ -790,9 +1079,9 @@ function DashboardStyleHome() {
                         <div className="lg:col-span-3 bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 shadow-xs text-left flex flex-col">
                           <div className="flex-1 flex flex-col min-h-0 space-y-4">
                             <div className="flex items-center justify-between">
-                              <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Quick Access</h3>
+                              <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.quickAccess")}</h3>
                               <button onClick={() => handleNavClick("Samachar")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5 cursor-pointer">
-                                View All →
+                                {t("dashboardindex.viewAll")} →
                               </button>
                             </div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-3 flex-1 py-1">
@@ -808,7 +1097,7 @@ function DashboardStyleHome() {
                                       <Icon className="w-4.5 h-4.5" />
                                     </div>
                                     <span className="text-[9px] font-bold text-[#8C6D58] group-hover:text-[#F97316] text-center truncate w-full transition duration-150">
-                                      {item.label}
+                                      {t("sidebar." + item.label.charAt(0).toLowerCase() + item.label.slice(1).replace(/\s+/g, ""))}
                                     </span>
                                   </button>
                                 );
@@ -826,8 +1115,8 @@ function DashboardStyleHome() {
                       <div className="bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left">
                         <div className="flex items-center justify-between gap-2">
                           <div>
-                            <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Upcoming Events</h3>
-                            <p className="text-[10px] text-[#8C6D58]">Snap-scroll with ← → arrow controls</p>
+                            <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.label_upcomingEvents")}</h3>
+                            <p className="text-[10px] text-[#8C6D58]">{t("dashboardindex.eventsDesc")}</p>
                           </div>
                           <div className="flex gap-2">
                             <button onClick={() => eventTrackRef.current?.scrollBy({ left: -320, behavior: "smooth" })} className="h-8 w-8 rounded-full border border-[#EBE3DB] bg-white hover:bg-[#FFF5EE] flex items-center justify-center text-[#F97316] transition"><ChevronLeft className="w-4 h-4" /></button>
@@ -840,12 +1129,12 @@ function DashboardStyleHome() {
                             <motion.article key={i} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.25, delay: i * 0.04 }} className="min-w-[260px] snap-start rounded-2xl border border-[#F3E8DE] bg-[#FFFDFB] p-3 shadow-sm hover:shadow-md transition">
                               <div className="flex items-center gap-3 group cursor-pointer" onClick={() => handleNavClick("Events")}>
                                 <div className="w-10 h-10 rounded-xl bg-[#FFF5EE] border border-[#F3E8DE] flex flex-col items-center justify-center flex-shrink-0 group-hover:border-[#F97316]/30 group-hover:bg-[#FDF2E9] transition duration-200">
-                                  <span className="text-xs font-extrabold text-[#F97316] leading-none">{ev.day}</span>
-                                  <span className="text-[8px] font-bold text-warm-muted leading-none mt-0.5">{ev.month}</span>
+                                  <span className="text-xs font-extrabold text-[#F97316] leading-none">{t(ev.day)}</span>
+                                  <span className="text-[8px] font-bold text-warm-muted leading-none mt-0.5">{t(ev.month)}</span>
                                 </div>
                                 <div className="text-xs leading-snug text-left">
-                                  <h4 className="font-bold text-[#3E2723] line-clamp-1 group-hover:text-[#F97316] transition duration-200">{ev.title}</h4>
-                                  <p className="text-[9px] text-warm-muted flex items-center gap-0.5 mt-0.5"><MapPin className="w-2.5 h-2.5 text-[#F97316]" /> {ev.location} · {ev.time}</p>
+                                  <h4 className="font-bold text-[#3E2723] line-clamp-1 group-hover:text-[#F97316] transition duration-200">{t(ev.title)}</h4>
+                                  <p className="text-[9px] text-warm-muted flex items-center gap-0.5 mt-0.5"><MapPin className="w-2.5 h-2.5 text-[#F97316]" /> {t(ev.location)} · {t(ev.time)}</p>
                                 </div>
                               </div>
                             </motion.article>
@@ -856,8 +1145,8 @@ function DashboardStyleHome() {
                       {/* Today's Highlights Timeline */}
                       <div className="bg-white rounded-[24px] border border-[#EBE3DB]/60 p-5 space-y-4 shadow-xs text-left relative overflow-hidden">
                         <div className="flex items-center justify-between gap-2">
-                          <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Today's Highlights</h3>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-600"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Live</span>
+                          <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.todaysHighlights")}</h3>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-600"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />{t("dashboardindex.live")}</span>
                         </div>
                         <div className="rounded-2xl border border-[#F3E8DE] bg-gradient-to-br from-[#FFF9F5] via-white to-[#FFF4EA] p-3 min-h-[115px] overflow-hidden relative">
                           <AnimatePresence mode="wait">
@@ -874,12 +1163,12 @@ function DashboardStyleHome() {
                                   <activeHighlight.icon className="w-4 h-4" />
                                 </div>
                                 <div className="text-left">
-                                  <p className="text-[10px] uppercase tracking-[0.3em] text-[#F97316]">Highlight</p>
-                                  <h4 className="text-sm font-bold text-[#3E2723] mt-0.5">{activeHighlight.name}</h4>
-                                  <p className="text-[10px] text-[#8C6D58] mt-1">{activeHighlight.type} · {activeHighlight.detail}</p>
+                                  <p className="text-[10px] uppercase tracking-[0.3em] text-[#F97316]">{t("dashboardindex.highlight")}</p>
+                                  <h4 className="text-sm font-bold text-[#3E2723] mt-0.5">{t(activeHighlight.name)}</h4>
+                                  <p className="text-[10px] text-[#8C6D58] mt-1">{t(activeHighlight.type)} · {t(activeHighlight.detail)}</p>
                                 </div>
                               </div>
-                              <div className="mt-2.5 flex items-center gap-2 text-[10px] text-emerald-600 font-semibold"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Updated now</div>
+                              <div className="mt-2.5 flex items-center gap-2 text-[10px] text-emerald-600 font-semibold"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />{t("dashboardindex.updatedNow")}</div>
                             </motion.div>
                           </AnimatePresence>
                         </div>
@@ -898,11 +1187,11 @@ function DashboardStyleHome() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div>
-                            <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Photo Gallery</h3>
-                            <p className="text-[10px] text-[#8C6D58]">One featured image at a time, hover-paused and swipe-ready</p>
+                            <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.photoGallery")}</h3>
+                            <p className="text-[10px] text-[#8C6D58]">{t("dashboardindex.galleryDesc")}</p>
                           </div>
                           <button onClick={() => handleNavClick("Gallery")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5">
-                            View All <ArrowRight className="w-3.5 h-3.5" />
+                            {t("dashboardindex.viewAll")} <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         <div
@@ -919,7 +1208,7 @@ function DashboardStyleHome() {
                             {galleryLoading && (
                               <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[20px] bg-white/75 backdrop-blur-sm">
                                 <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-[#F97316] shadow-sm border border-[#EBE3DB]">
-                                  <Loader className="w-3.5 h-3.5 animate-spin" /> Loading image…
+                                  <Loader className="w-3.5 h-3.5 animate-spin" /> {t("dashboardindex.loadingImage")}
                                 </span>
                               </div>
                             )}
@@ -937,9 +1226,9 @@ function DashboardStyleHome() {
                               />
                             </AnimatePresence>
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent p-4 text-white">
-                              <p className="text-[10px] uppercase tracking-[0.25em] text-white/80">Featured photo</p>
-                              <p className="text-sm font-semibold mt-1">Community memory #{galleryIndex + 1}</p>
-                              <p className="text-[11px] text-white/80 mt-1">Tap to open the full-screen image view.</p>
+                              <p className="text-[10px] uppercase tracking-[0.25em] text-white/80">{t("dashboardindex.featuredPhoto")}</p>
+                              <p className="text-sm font-semibold mt-1">{t("dashboardindex.communityMemory").replace("{number}", (galleryIndex + 1).toString())}</p>
+                              <p className="text-[11px] text-white/80 mt-1">{t("dashboardindex.tapToOpenGallery")}</p>
                             </div>
                           </button>
                           <div className="mt-3 flex items-center justify-between gap-2">
@@ -954,7 +1243,7 @@ function DashboardStyleHome() {
                                 />
                               ))}
                             </div>
-                            <span className="text-[10px] text-[#8C6D58]">{galleryPaused ? "Paused on hover" : "Auto-rotating"}</span>
+                            <span className="text-[10px] text-[#8C6D58]">{galleryPaused ? t("dashboardindex.pausedOnHover") : t("dashboardindex.autoRotating")}</span>
                           </div>
                         </div>
                       </motion.div>
@@ -965,17 +1254,17 @@ function DashboardStyleHome() {
                   {/* Popular Videos */}
                   <div className="space-y-3 pb-16 lg:pb-0">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">Popular Videos</h3>
+                      <h3 className="font-bold text-sm text-[#3E2723] tracking-tight">{t("dashboardindex.popularVideos")}</h3>
                       <button onClick={() => handleNavClick("Videos")} className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-0.5">
-                        View All <ArrowRight className="w-3.5 h-3.5" />
+                        {t("dashboardindex.viewAll")} <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-[1.05fr_0.95fr] gap-4">
                       <motion.div key={activeVideo.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-[24px] border border-[#EBE3DB]/70 bg-[#FFFDFB] p-3 shadow-sm overflow-hidden relative">
                         <img src={activeVideo.img} alt={activeVideo.title} className="h-56 w-full rounded-[18px] object-cover" />
                         <div className="absolute inset-x-5 bottom-5 rounded-[18px] bg-black/65 p-4 text-white backdrop-blur-sm">
-                          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.25em] text-white/80"><span>Spotlight</span><span>{activeVideo.duration}</span></div>
-                          <h4 className="text-sm font-bold mt-1">{activeVideo.title}</h4>
+                          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.25em] text-white/80"><span>{t("dashboardindex.spotlight")}</span><span>{activeVideo.duration}</span></div>
+                          <h4 className="text-sm font-bold mt-1">{t(activeVideo.title)}</h4>
                           <motion.div className="mt-3 h-1.5 rounded-full bg-white/20 overflow-hidden">
                             <motion.div key={videoIndex} className="h-full rounded-full bg-[#FBBF24]" initial={{ width: 0 }} animate={{ width: "100%" }} transition={{ duration: 5, ease: "linear" }} />
                           </motion.div>
@@ -984,10 +1273,10 @@ function DashboardStyleHome() {
                       <div className="space-y-3">
                         {POPULAR_VIDEOS.map((vid, i) => (
                           <button key={i} onClick={() => setVideoIndex(i)} className={"w-full rounded-2xl border p-3 text-left flex gap-3 transition " + (i === videoIndex ? "border-[#F97316] bg-[#FFF8F3] shadow-sm" : "border-[#EBE3DB] bg-white hover:bg-[#FFF8F3]")}>
-                            <img src={vid.img} alt={vid.title} className="h-16 w-24 rounded-xl object-cover" />
+                            <img src={vid.img} alt={t(vid.title)} className="h-16 w-24 rounded-xl object-cover" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-[10px] uppercase tracking-[0.25em] text-[#F97316]">Video {i + 1}</div>
-                              <div className="text-xs font-bold text-[#3E2723] mt-0.5 line-clamp-2">{vid.title}</div>
+                              <div className="text-[10px] uppercase tracking-[0.25em] text-[#F97316]">{t("Video")} {i + 1}</div>
+                              <div className="text-xs font-bold text-[#3E2723] mt-0.5 line-clamp-2">{t(vid.title)}</div>
                               <div className="text-[10px] text-[#8C6D58] mt-1">{vid.duration}</div>
                             </div>
                             <Play className="w-4 h-4 text-[#F97316] mt-1" />
@@ -1003,22 +1292,22 @@ function DashboardStyleHome() {
               {activeNav === "Samachar" && (
                 <motion.div key="samachar" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Samaj Samachar & Board</h2>
-                    <span className="text-xs text-warm-muted">{news.length || NEWS.length} articles published</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardindex.samajSamacharBoard")}</h2>
+                    <span className="text-xs text-warm-muted">{news.length || NEWS.length} {t("articles published")}</span>
                   </div>
                   <div className="grid md:grid-cols-2 gap-6">
                     {(news.length > 0 ? news : NEWS).map((item: any) => (
                       <div key={item.id} onClick={() => setSelectedNews(item)} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden flex flex-col md:flex-row hover:shadow-md transition cursor-pointer">
-                        <img src={getImageUrl(item.img || item.img_url)} alt="" className="w-full md:w-44 h-32 object-cover" />
+                        <img src={item.img} alt="" className="w-full md:w-44 h-32 object-cover" />
                         <div className="p-4 flex-1 flex flex-col justify-between">
                           <div>
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-[#F97316] bg-[#FFF5EE] px-2.5 py-0.5 rounded-full">{item.category}</span>
-                            <h3 className="font-bold text-sm text-[#3E2723] mt-2 line-clamp-2">{item.title}</h3>
-                            <p className="text-xs text-warm-muted mt-1 line-clamp-2">{item.excerpt}</p>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-[#F97316] bg-[#FFF5EE] px-2.5 py-0.5 rounded-full">{t(item.category)}</span>
+                            <h3 className="font-bold text-sm text-[#3E2723] mt-2 line-clamp-2">{t(item.title)}</h3>
+                            <p className="text-xs text-warm-muted mt-1 line-clamp-2">{t(item.excerpt)}</p>
                           </div>
                           <div className="text-[10px] text-warm-muted flex justify-between items-center mt-3 pt-2 border-t border-[#F3E8DE]">
-                            <span>📅 {item.date}</span>
-                            <span className="text-[#F97316] font-semibold">Read More →</span>
+                            <span>📅 {t(item.date)}</span>
+                            <span className="text-[#F97316] font-semibold">{t("Read More")} →</span>
                           </div>
                         </div>
                       </div>
@@ -1031,9 +1320,9 @@ function DashboardStyleHome() {
               {activeNav === "Communities" && (
                 <motion.div key="communities" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Samaj Communities</h2>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("sidebar.communities")}</h2>
                     <span className="text-xs bg-[#FDF2E9] text-[#F97316] px-3 py-1 rounded-full font-bold">
-                      {loading ? <Loader className="w-3 h-3 animate-spin inline" /> : `${communities.length}+ Communities`}
+                      {loading ? <Loader className="w-3 h-3 animate-spin inline" /> : `${communities.length}+ ${t("sidebar.communities")}`}
                     </span>
                   </div>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1060,8 +1349,8 @@ function DashboardStyleHome() {
                                 setCommunityList(copy);
                               }}
                               className={`text-xs px-3.5 py-1.5 rounded-full font-semibold transition ${c.joined
-                                  ? "bg-emerald-100 text-emerald-700 flex items-center gap-1"
-                                  : "bg-[#F97316] text-white hover:bg-[#EA580C]"
+                                ? "bg-emerald-100 text-emerald-700 flex items-center gap-1"
+                                : "bg-[#F97316] text-white hover:bg-[#EA580C]"
                                 }`}
                             >
                               {c.joined ? <><Check className="w-3.5 h-3.5" /> Joined</> : "Join"}
@@ -1078,49 +1367,39 @@ function DashboardStyleHome() {
               {activeNav === "Matrimony" && (
                 <motion.div key="matrimony" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Privacy-First Matrimony</h2>
-                    <span className="text-xs text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full font-bold">✓ Verified Profiles Only</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardmatrimony.title_matrimony")}</h2>
+                    <span className="text-xs text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full font-bold">✓ {t("Verified Profiles Only")}</span>
                   </div>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {matrimonyList.map((m, i) => (
                       <div key={i} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between hover:shadow-md transition">
                         <div className="aspect-[4/5] relative">
-                          <img src={m.photo || m.photo_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&fit=crop"} alt={m.name} className="w-full h-full object-cover" />
+                          <img src={m.photo} alt={t(m.name)} className="w-full h-full object-cover" />
                           <div className="absolute top-2 left-2 bg-white/95 px-2 py-0.5 rounded-full text-[10px] font-bold text-[#F97316]">
-                            {m.match}% Match
+                            {m.match}% {t("Match")}
                           </div>
                         </div>
                         <div className="p-4 flex-grow flex flex-col justify-between">
                           <div>
-                            <h3 className="font-bold text-xs text-[#3E2723]">{m.name}, {m.age}</h3>
-                            <p className="text-[10px] text-warm-muted">{m.education} · {m.profession}</p>
+                            <h3 className="font-bold text-xs text-[#3E2723]">{t(m.name)}, {t(m.age.toString())}</h3>
+                            <p className="text-[10px] text-warm-muted">{t(m.education)} · {t(m.profession)}</p>
                             <p className="text-[10px] text-[#F97316] font-semibold mt-1 flex items-center gap-0.5">
-                              <MapPin className="w-3 h-3" /> {m.location}
+                              <MapPin className="w-3 h-3" /> {t(m.location)}
                             </p>
                           </div>
                           <div className="mt-3">
                             <button
-                              onClick={async () => {
-                                try {
-                                  if (!m.interested) {
-                                    await api.showInterest(m.id);
-                                    toast.success(`Interest sent to ${m.name}!`);
-                                  } else {
-                                    toast.info("Interest already expressed.");
-                                  }
-                                  const copy = [...matrimonyList];
-                                  copy[i].interested = true;
-                                  setMatrimonyList(copy);
-                                } catch (e: any) {
-                                  toast.error(e.message || "Failed to express interest. Make sure your matrimony profile is set up.");
-                                }
+                              onClick={() => {
+                                const copy = [...matrimonyList];
+                                copy[i].interested = !copy[i].interested;
+                                setMatrimonyList(copy);
                               }}
                               className={`w-full py-2 rounded-lg text-xs font-semibold transition ${m.interested
-                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                                  : "border border-[#F97316] text-[#F97316] hover:bg-[#FFF5EE]"
+                                ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                : "border border-[#F97316] text-[#F97316] hover:bg-[#FFF5EE]"
                                 }`}
                             >
-                              {m.interested ? "Interest Sent ✓" : "Express Interest"}
+                              {m.interested ? t("Interest Sent") + " ✓" : t("Express Interest")}
                             </button>
                           </div>
                         </div>
@@ -1135,11 +1414,11 @@ function DashboardStyleHome() {
                 <motion.div key="jobs" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
                     <div>
-                      <h2 className="text-2xl font-bold text-[#3E2723]">Community Career Opportunities</h2>
-                      <p className="text-xs text-warm-muted mt-1">Connect community talent with community-owned businesses.</p>
+                      <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardjobs.title_jobPortal")}</h2>
+                      <p className="text-xs text-warm-muted mt-1">{t("dashboardjobs.desc_opportunitiesFromSamajBusinesses")}</p>
                     </div>
                     <button onClick={() => setShowPostJob(true)} className="px-4 py-2 text-xs bg-[#F97316] text-white font-semibold rounded-xl flex items-center gap-1.5 shadow-md hover:bg-[#EA580C]">
-                      <Plus className="w-4 h-4" /> Post a Job
+                      <Plus className="w-4 h-4" /> {t("dashboardindex.postJob")}
                     </button>
                   </div>
                   <div className="space-y-3">
@@ -1148,11 +1427,11 @@ function DashboardStyleHome() {
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-xl bg-orange-100 text-[#F97316] font-bold flex items-center justify-center text-lg">{job.logo ?? "J"}</div>
                           <div>
-                            <h3 className="font-bold text-sm text-[#3E2723]">{job.role}</h3>
-                            <p className="text-xs text-warm-muted">{job.company} · {job.location}</p>
+                            <h3 className="font-bold text-sm text-[#3E2723]">{t(job.role)}</h3>
+                            <p className="text-xs text-warm-muted">{t(job.company)} · {t(job.location)}</p>
                             <div className="flex gap-2 mt-1">
-                              <span className="text-[9px] bg-orange-50 text-[#F97316] font-semibold px-2 py-0.5 rounded-full">{job.salary ?? "Competitive"}</span>
-                              <span className="text-[9px] bg-[#FAF3EC] text-[#5C4033] font-semibold px-2 py-0.5 rounded-full">{job.type ?? "Full-time"}</span>
+                              <span className="text-[9px] bg-orange-50 text-[#F97316] font-semibold px-2 py-0.5 rounded-full">{job.salary ? t(job.salary) : t("Competitive")}</span>
+                              <span className="text-[9px] bg-[#FAF3EC] text-[#5C4033] font-semibold px-2 py-0.5 rounded-full">{t(job.type ?? "Full-time")}</span>
                             </div>
                           </div>
                         </div>
@@ -1164,11 +1443,11 @@ function DashboardStyleHome() {
                               setJobList(copy);
                             }}
                             className={`flex-1 md:flex-none text-xs px-5 py-2 rounded-xl font-semibold transition ${job.applied
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-[#F97316] text-white hover:bg-[#EA580C]"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-[#F97316] text-white hover:bg-[#EA580C]"
                               }`}
                           >
-                            {job.applied ? "Applied" : "Apply Now"}
+                            {job.applied ? t("Applied") : t("dashboardjobs.apply")}
                           </button>
                         </div>
                       </div>
@@ -1181,21 +1460,21 @@ function DashboardStyleHome() {
               {activeNav === "Events" && (
                 <motion.div key="events" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Samaj Events Calendar</h2>
-                    <span className="text-xs text-warm-muted">Upcoming events across state & country</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardevents.title_events")}</h2>
+                    <span className="text-xs text-warm-muted">{t("dashboardevents.desc_sammelanSportsMarriagesAndMore")}</span>
                   </div>
                   <div className="grid md:grid-cols-3 gap-5">
                     {eventList.slice(0, 6).map((ev: any, i) => (
                       <div key={i} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between hover:shadow-md transition">
-                        <img src={ev.img ? getImageUrl(ev.img) : "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=200&fit=crop"} alt="" className="w-full h-40 object-cover" />
+                        <img src={ev.img ?? "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&h=200&fit=crop"} alt="" className="w-full h-40 object-cover" />
                         <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                           <div>
-                            <div className="text-[10px] text-[#F97316] font-bold">{ev.date} · {ev.venue}</div>
-                            <h3 className="font-bold text-sm text-[#3E2723] mt-1">{ev.title}</h3>
-                            <p className="text-xs text-warm-muted line-clamp-2 mt-1">{ev.desc}</p>
+                            <div className="text-[10px] text-[#F97316] font-bold">{t(ev.date)} · {t(ev.venue)}</div>
+                            <h3 className="font-bold text-sm text-[#3E2723] mt-1">{t(ev.title)}</h3>
+                            <p className="text-xs text-warm-muted line-clamp-2 mt-1">{t(ev.desc)}</p>
                           </div>
                           <div className="flex items-center justify-between border-t border-[#F3E8DE] pt-3">
-                            <span className="text-[10px] text-warm-muted">{ev.attendees} Attending</span>
+                            <span className="text-[10px] text-warm-muted">{ev.attendees} {t("Attending")}</span>
                             <button
                               onClick={() => {
                                 if (ev.registered) {
@@ -1215,11 +1494,11 @@ function DashboardStyleHome() {
                                 }
                               }}
                               className={`text-xs px-3.5 py-1.5 rounded-full font-semibold transition cursor-pointer ${ev.registered
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-[#F97316] text-white hover:bg-[#EA580C]"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-[#F97316] text-white hover:bg-[#EA580C]"
                                 }`}
                             >
-                              {ev.registered ? "Registered ✓" : "Register Now"}
+                              {ev.registered ? t("Registered") + " ✓" : t("dashboardevents.register")}
                             </button>
                           </div>
                         </div>
@@ -1233,19 +1512,19 @@ function DashboardStyleHome() {
               {activeNav === "Directory" && (
                 <motion.div key="directory" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Samaj Member Directory</h2>
-                    <span className="text-xs bg-[#FDF2E9] text-[#F97316] px-3 py-1 rounded-full font-bold">1.2M+ Verified Members</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboarddirectory.title_memberDirectory")}</h2>
+                    <span className="text-xs bg-[#FDF2E9] text-[#F97316] px-3 py-1 rounded-full font-bold">1.2M+ {t("Verified Members")}</span>
                   </div>
                   <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
                     {PARTNERS.map((m, i) => (
                       <div key={i} className="bg-white border border-[#EBE3DB] rounded-2xl p-4 flex flex-col items-center text-center space-y-3 shadow-sm hover:shadow-md transition">
-                        <img src={m.photo} alt={m.name} className="w-16 h-16 rounded-full object-cover border border-[#F3E8DE]" />
+                        <img src={m.photo} alt={t(m.name)} className="w-16 h-16 rounded-full object-cover border border-[#F3E8DE]" />
                         <div>
-                          <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-wider">KYC Verified</span>
-                          <h3 className="font-bold text-sm text-[#3E2723] mt-1.5">{m.name}</h3>
-                          <p className="text-[10px] text-warm-muted">{m.profession} · {m.education}</p>
+                          <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-wider">{t("KYC Verified")}</span>
+                          <h3 className="font-bold text-sm text-[#3E2723] mt-1.5">{t(m.name)}</h3>
+                          <p className="text-[10px] text-warm-muted">{t(m.profession)} · {t(m.education)}</p>
                           <p className="text-[10px] text-[#F97316] font-semibold mt-1 flex items-center gap-0.5 justify-center">
-                            <MapPin className="w-3 h-3" /> {m.location}
+                            <MapPin className="w-3 h-3" /> {t(m.location)}
                           </p>
                         </div>
                         <button
@@ -1254,9 +1533,9 @@ function DashboardStyleHome() {
                             const matched = families.find((f: any) => f.head.includes(lastName));
 
                             if (matched && matched.members) {
-                              const spouse = matched.members.find((mb: any) => mb.relation === "Spouse") || { name: "Spouse", occupation: "Homemaker" };
-                              const son = matched.members.find((mb: any) => mb.relation === "Son") || { name: "Son", occupation: "Student" };
-                              const daughter = matched.members.find((mb: any) => mb.relation === "Daughter") || { name: "Daughter", occupation: "Student" };
+                              const spouse = matched.members.find((mb: any) => mb.relation === "Spouse") || { name: t("communityadminfamilies.label_spouse"), occupation: "Homemaker" };
+                              const son = matched.members.find((mb: any) => mb.relation === "Son") || { name: t("dashboardfamily.son"), occupation: "Student" };
+                              const daughter = matched.members.find((mb: any) => mb.relation === "Daughter") || { name: t("dashboardfamily.daughter"), occupation: "Student" };
 
                               setSelectedFamilyTree({
                                 name: m.name,
@@ -1293,38 +1572,7 @@ function DashboardStyleHome() {
 
               {/* BUSINESS DIRECTORY VIEW */}
               {activeNav === "Business Directory" && (
-                <motion.div key="business" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Samaj Business Directory</h2>
-                    <span className="text-xs text-warm-muted">Support and grow community-owned businesses</span>
-                  </div>
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                    {(businesses.length > 0 ? businesses : BUSINESSES).map((b) => (
-                      <div key={b.id} className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden flex flex-col justify-between hover:shadow-md transition shadow-sm">
-                        {b.img || b.img_url ? (
-                          <img src={getImageUrl(b.img || b.img_url)} alt={b.name} className="w-full h-32 object-cover" />
-                        ) : (
-                          <div className="w-full h-32 bg-primary text-white flex items-center justify-center font-bold text-lg">
-                            {b.name?.[0] || "B"}
-                          </div>
-                        )}
-                        <div className="p-4 flex-1 flex flex-col justify-between">
-                          <div>
-                            <div className="text-[8px] uppercase tracking-wider text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full w-max">
-                              {b.category}
-                            </div>
-                            <h3 className="font-bold text-sm text-[#3E2723] mt-2">{b.name}</h3>
-                            <p className="text-[10px] text-warm-muted mt-1 leading-snug">{b.desc}</p>
-                          </div>
-                          <div className="border-t border-[#F3E8DE] mt-4 pt-3 flex items-center justify-between text-xs font-semibold">
-                            <span className="flex items-center gap-0.5 text-amber-500">★ {b.rating}</span>
-                            <span className="text-[#F97316]">👤 {b.owner}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
+                <BusinessDirectorySection t={t} />
               )}
 
               {/* DONATIONS VIEW */}
@@ -1332,8 +1580,8 @@ function DashboardStyleHome() {
                 <motion.div key="donations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center flex-wrap gap-4">
                     <div>
-                      <h2 className="text-2xl font-bold text-[#3E2723]">Donations & Campaigns</h2>
-                      <p className="text-xs text-warm-muted mt-1">Support community-driven development and trust initiatives.</p>
+                      <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboarddonations.title_donations")}</h2>
+                      <p className="text-xs text-warm-muted mt-1">{t("dashboarddonations.desc_activeCommunityFundraisingCampaigns")}</p>
                     </div>
                     {/* Tabs switcher */}
                     <div className="flex bg-[#FAF3EC] border border-[#EBE3DB] rounded-xl p-1 gap-1">
@@ -1342,14 +1590,14 @@ function DashboardStyleHome() {
                         className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${donationTab === "campaigns" ? "bg-white text-[#F97316] shadow-2xs font-bold" : "text-[#5C4033] hover:text-[#3E2723]"
                           }`}
                       >
-                        Active Campaigns
+                        {t("dashboarddonations.activeCampaigns")}
                       </button>
                       <button
                         onClick={() => setDonationTab("history")}
                         className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${donationTab === "history" ? "bg-white text-[#F97316] shadow-2xs font-bold" : "text-[#5C4033] hover:text-[#3E2723]"
                           }`}
                       >
-                        Donation History
+                        {t("dashboarddonations.donationHistory")}
                       </button>
                     </div>
                   </div>
@@ -1369,13 +1617,13 @@ function DashboardStyleHome() {
                               {/* Progress bar */}
                               <div className="space-y-1.5 mt-4">
                                 <div className="flex justify-between text-xs font-bold">
-                                  <span>₹{raisedVal.toLocaleString()} raised</span>
-                                  <span>Goal: ₹{goalVal.toLocaleString()}</span>
+                                  <span>₹{raisedVal.toLocaleString()} {t("dashboarddonations.raised")}</span>
+                                  <span>{t("dashboarddonations.goal")}: ₹{goalVal.toLocaleString()}</span>
                                 </div>
                                 <div className="h-2 bg-[#FFF5EE] rounded-full overflow-hidden border border-[#F3E8DE]">
                                   <div className="h-full bg-[#F97316] rounded-full" style={{ width: `${pct}%` }} />
                                 </div>
-                                <div className="text-[10px] text-[#F97316] font-bold text-right">{pct}% Completed</div>
+                                <div className="text-[10px] text-[#F97316] font-bold text-right">{pct}% {t("dashboarddonations.completed")}</div>
                               </div>
                             </div>
 
@@ -1384,7 +1632,7 @@ function DashboardStyleHome() {
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#8C6D58]">₹</span>
                                 <input
                                   type="number"
-                                  placeholder="Enter amount"
+                                  placeholder={t("dashboarddonations.placeholder_enterAmount")}
                                   value={donateAmount[item.id] || ""}
                                   onChange={(e) => setDonateAmount({ ...donateAmount, [item.id]: e.target.value })}
                                   className="w-full pl-6 pr-3 py-2 text-xs rounded-xl border border-[#EBE3DB] bg-[#FFF8F2] focus:outline-none focus:border-[#F97316]"
@@ -1438,7 +1686,7 @@ function DashboardStyleHome() {
                                 }}
                                 className="bg-[#F97316] text-white text-xs font-semibold py-2 px-5 rounded-xl hover:bg-[#EA580C] transition shadow-sm cursor-pointer"
                               >
-                                Donate
+                                {t("dashboarddonations.donate")}
                               </button>
                             </div>
                           </div>
@@ -1449,14 +1697,14 @@ function DashboardStyleHome() {
                     <div className="bg-white border border-[#EBE3DB] rounded-2xl overflow-hidden shadow-sm">
                       {userDonations.length === 0 ? (
                         <div className="p-8 text-center text-warm-muted text-xs">
-                          You haven't made any donations yet. Go to active campaigns to contribute!
+                          {t("dashboarddonations.noDonationsYet")}
                         </div>
                       ) : (
                         <table className="w-full text-sm">
                           <thead className="bg-[#FAF3EC]">
                             <tr>
-                              {["Campaign", "Amount", "Date", "Method", "Status", "Receipt"].map(h => (
-                                <th key={h} className="text-left p-3 text-xs uppercase tracking-wider text-warm-muted">{h}</th>
+                              {["campaign", "amount", "date", "method", "status", "receipt"].map(h => (
+                                <th key={h} className="text-left p-3 text-xs uppercase tracking-wider text-warm-muted">{t(`dashboarddonations.${h}`)}</th>
                               ))}
                             </tr>
                           </thead>
@@ -1469,7 +1717,7 @@ function DashboardStyleHome() {
                                 <td className="p-3 text-xs text-warm-muted">{d.method}</td>
                                 <td className="p-3">
                                   <span className="bg-[#E8F5E9] text-[#2E7D32] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#C8E6C9]">
-                                    {d.status || "Success"}
+                                    {d.status || t("dashboarddonations.success")}
                                   </span>
                                 </td>
                                 <td className="p-3">
@@ -1482,7 +1730,7 @@ function DashboardStyleHome() {
                                     })}
                                     className="flex items-center gap-1 text-[10px] font-bold text-[#F97316] hover:text-[#EA580C] cursor-pointer"
                                   >
-                                    <Download className="w-3.5 h-3.5" /> PDF
+                                    <Download className="w-3.5 h-3.5" /> {t("dashboarddonations.pdf")}
                                   </button>
                                 </td>
                               </tr>
@@ -1499,8 +1747,8 @@ function DashboardStyleHome() {
               {activeNav === "Gallery" && (
                 <motion.div key="gallery" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Samaj Photo Gallery</h2>
-                    <span className="text-xs text-warm-muted">Moments of celebrations and gatherings</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardindex.photoGallery")}</h2>
+                    <span className="text-xs text-warm-muted">{t("dashboardindex.galleryDesc")}</span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {GALLERY_IMAGES.map((img, i) => (
@@ -1508,7 +1756,7 @@ function DashboardStyleHome() {
                         <img src={img} alt="gallery" className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
                         <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition duration-300 flex items-center justify-center">
                           <span className="text-white text-xs font-bold border border-white px-3 py-1.5 rounded-full flex items-center gap-1">
-                            <ImageIcon className="w-3.5 h-3.5" /> View Photo
+                            <ImageIcon className="w-3.5 h-3.5" /> {t("dashboardindex.viewPhoto")}
                           </span>
                         </div>
                       </div>
@@ -1521,8 +1769,8 @@ function DashboardStyleHome() {
               {activeNav === "Videos" && (
                 <motion.div key="videos" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Popular Videos</h2>
-                    <span className="text-xs text-warm-muted">Watch events and cultural video programs</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardindex.popularVideos")}</h2>
+                    <span className="text-xs text-warm-muted">{t("dashboardindex.watchEventsAndCulturalVideoPrograms")}</span>
                   </div>
                   <div className="grid md:grid-cols-3 gap-6">
                     {POPULAR_VIDEOS.map((vid, i) => (
@@ -1539,7 +1787,7 @@ function DashboardStyleHome() {
                           </span>
                         </div>
                         <div className="p-4 text-left">
-                          <h4 className="font-bold text-sm text-[#3E2723]">{vid.title}</h4>
+                          <h4 className="font-bold text-sm text-[#3E2723]">{t(vid.title)}</h4>
                         </div>
                       </div>
                     ))}
@@ -1551,8 +1799,8 @@ function DashboardStyleHome() {
               {activeNav === "Documents" && (
                 <motion.div key="documents" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">Official Samaj Documents</h2>
-                    <span className="text-xs text-warm-muted">Download trust documents, certificates, and reports</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("sidebar.documents")}</h2>
+                    <span className="text-xs text-warm-muted">{t("dashboarddocuments.desc_downloadTrustDocumentsCertificatesAndReports")}</span>
                   </div>
                   <div className="space-y-3">
                     {[
@@ -1586,8 +1834,8 @@ function DashboardStyleHome() {
               {activeNav === "My Network" && (
                 <motion.div key="network" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-[#3E2723]">My Samaj Family Network</h2>
-                    <span className="text-xs text-warm-muted">Visual family connections hierarchy</span>
+                    <h2 className="text-2xl font-bold text-[#3E2723]">{t("sidebar.myNetwork")}</h2>
+                    <span className="text-xs text-warm-muted">{t("dashboardfamily.desc_visualFamilyConnectionsHierarchy")}</span>
                   </div>
 
                   <div className="bg-white border border-[#EBE3DB] rounded-2xl p-6 shadow-sm flex flex-col items-center">
@@ -1597,7 +1845,7 @@ function DashboardStyleHome() {
                       <div className="flex justify-center">
                         <div className="bg-[#FFF5EE] border-2 border-[#EBE3DB] p-3 rounded-xl text-center w-40">
                           <div className="font-bold text-xs">Late Purshottam Patel</div>
-                          <div className="text-[9px] text-warm-muted">Grandfather</div>
+                          <div className="text-[9px] text-warm-muted">{t("dashboardfamily.grandfather")}</div>
                         </div>
                       </div>
                       <div className="w-0.5 h-6 bg-[#EBE3DB] mx-auto"></div>
@@ -1606,7 +1854,7 @@ function DashboardStyleHome() {
                       <div className="flex justify-center">
                         <div className="bg-[#FFF5EE] border-2 border-[#EBE3DB] p-3 rounded-xl text-center w-40">
                           <div className="font-bold text-xs">Arvindbhai Patel</div>
-                          <div className="text-[9px] text-warm-muted">Father (Ahmedabad)</div>
+                          <div className="text-[9px] text-warm-muted">{t("dashboardfamily.father")} (Ahmedabad)</div>
                         </div>
                       </div>
                       <div className="w-0.5 h-6 bg-[#EBE3DB] mx-auto"></div>
@@ -1615,11 +1863,11 @@ function DashboardStyleHome() {
                       <div className="flex justify-center gap-12">
                         <div className="bg-[#FDF2E9] border-2 border-[#F97316] p-3 rounded-xl text-center w-40 shadow-sm">
                           <div className="font-bold text-xs text-[#F97316]">{userProfile.name}</div>
-                          <div className="text-[9px] text-[#F97316] font-semibold">Self</div>
+                          <div className="text-[9px] text-[#F97316] font-semibold">{t("dashboardfamily.self")}</div>
                         </div>
                         <div className="bg-[#FFF5EE] border-2 border-[#EBE3DB] p-3 rounded-xl text-center w-40">
                           <div className="font-bold text-xs">Kajal Patel</div>
-                          <div className="text-[9px] text-warm-muted">Spouse</div>
+                          <div className="text-[9px] text-warm-muted">{t("dashboardfamily.spouse")}</div>
                         </div>
                       </div>
                       <div className="w-0.5 h-6 bg-[#EBE3DB] mx-auto"></div>
@@ -1628,11 +1876,11 @@ function DashboardStyleHome() {
                       <div className="flex justify-center gap-12">
                         <div className="bg-[#FFF5EE] border-2 border-[#EBE3DB] p-3 rounded-xl text-center w-40">
                           <div className="font-bold text-xs">Aarav Patel</div>
-                          <div className="text-[9px] text-warm-muted">Son (Age: 16)</div>
+                          <div className="text-[9px] text-warm-muted">{t("dashboardfamily.son")} (Age: 16)</div>
                         </div>
                         <div className="bg-[#FFF5EE] border-2 border-[#EBE3DB] p-3 rounded-xl text-center w-40">
                           <div className="font-bold text-xs">Diya Patel</div>
-                          <div className="text-[9px] text-warm-muted">Daughter (Age: 12)</div>
+                          <div className="text-[9px] text-warm-muted">{t("dashboardfamily.daughter")} (Age: 12)</div>
                         </div>
                       </div>
                     </div>
@@ -1643,26 +1891,26 @@ function DashboardStyleHome() {
               {/* SETTINGS VIEW */}
               {activeNav === "Settings" && (
                 <motion.div key="settings" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
-                  <h2 className="text-2xl font-bold text-[#3E2723]">Profile & Settings</h2>
+                  <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardprofile.title_profileAndSettings")}</h2>
 
                   <div className="bg-white border border-[#EBE3DB] rounded-[20px] p-6 shadow-sm max-w-2xl">
                     <form onSubmit={(e) => {
                       e.preventDefault();
-                      alert("Profile updated successfully!");
+                      alert(t("dashboardprofile.profileUpdated") + "!");
                     }} className="space-y-4">
 
                       <div className="flex flex-col sm:flex-row gap-4 items-center pb-4 border-b border-[#F3E8DE]">
                         <img src={userProfile.avatar} alt="Profile" className="w-16 h-16 rounded-full object-cover border-2 border-[#F97316]" />
                         <div>
                           <h3 className="font-bold text-sm">{userProfile.name}</h3>
-                          <p className="text-xs text-warm-muted">{userProfile.samaj} · {userProfile.membership}</p>
-                          <button type="button" onClick={() => alert("Upload feature is coming soon")} className="mt-2 text-xs font-semibold text-[#F97316] hover:underline">Change Profile Photo</button>
+                          <p className="text-xs text-warm-muted">{userProfile.samaj} · {t(userProfile.membership)}</p>
+                          <button type="button" onClick={() => alert(t("dashboardprofile.uploadComingSoon"))} className="mt-2 text-xs font-semibold text-[#F97316] hover:underline">{t("dashboardprofile.changeProfilePhoto")}</button>
                         </div>
                       </div>
 
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-[#5C4033]">Full Name</label>
+                          <label className="text-xs font-bold text-[#5C4033]">{t("dashboardfamily.fullName")}</label>
                           <div className="relative">
                             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
                             <input
@@ -1675,7 +1923,7 @@ function DashboardStyleHome() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-[#5C4033]">Email Address</label>
+                          <label className="text-xs font-bold text-[#5C4033]">{t("registercommunity.emailAddress")}</label>
                           <div className="relative">
                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
                             <input
@@ -1688,7 +1936,7 @@ function DashboardStyleHome() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-[#5C4033]">Phone Number</label>
+                          <label className="text-xs font-bold text-[#5C4033]">{t("registercommunity.phoneNumber")}</label>
                           <div className="relative">
                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
                             <input
@@ -1701,7 +1949,7 @@ function DashboardStyleHome() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-[#5C4033]">Community Samaj</label>
+                          <label className="text-xs font-bold text-[#5C4033]">{t("registerindex.label_community")}</label>
                           <div className="relative">
                             <HomeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D58]" />
                             <input
@@ -1715,7 +1963,7 @@ function DashboardStyleHome() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-[#5C4033]">Residential Address</label>
+                        <label className="text-xs font-bold text-[#5C4033]">{t("dashboardprofile.residentialAddress")}</label>
                         <textarea
                           value={userProfile.address}
                           onChange={(e) => setUserProfile({ ...userProfile, address: e.target.value })}
@@ -1726,7 +1974,7 @@ function DashboardStyleHome() {
 
                       <div className="pt-2">
                         <button type="submit" className="bg-[#F97316] text-white text-xs font-semibold py-2 px-6 rounded-xl hover:bg-[#EA580C] transition shadow-md">
-                          Save Changes
+                          {t("dashboardprofile.saveChanges")}
                         </button>
                       </div>
                     </form>
@@ -1739,12 +1987,12 @@ function DashboardStyleHome() {
                 <motion.div key="subscription" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                      <h2 className="text-2xl font-bold text-[#3E2723]">Premium Memberships</h2>
-                      <p className="text-xs text-warm-muted mt-1 font-medium">Empower your family and connect globally with our premium tiers.</p>
+                      <h2 className="text-2xl font-bold text-[#3E2723]">{t("dashboardplan.title_myPlan")}</h2>
+                      <p className="text-xs text-warm-muted mt-1 font-medium">{t("dashboardplan.desc_manageYourSubscriptionAndBilling")}</p>
                     </div>
                     <div className="flex items-center gap-2 bg-white border border-[#EBE3DB] rounded-2xl px-4 py-2 self-start sm:self-auto shadow-2xs">
-                      <span className="text-[10px] text-warm-muted font-bold">CURRENT STATUS:</span>
-                      <span className="text-xs font-extrabold text-[#F97316] bg-[#FFF5EE] border border-[#F3E8DE] px-2.5 py-0.5 rounded-full">{userProfile.membership}</span>
+                      <span className="text-[10px] text-warm-muted font-bold">{t("registercommunity.currentStatus")}:</span>
+                      <span className="text-xs font-extrabold text-[#F97316] bg-[#FFF5EE] border border-[#F3E8DE] px-2.5 py-0.5 rounded-full">{t(userProfile.membership)}</span>
                     </div>
                   </div>
 
@@ -1756,8 +2004,8 @@ function DashboardStyleHome() {
                         <div className="w-10 h-10 rounded-2xl bg-[#FAF3EC] text-[#8C6D58] flex items-center justify-center border border-[#EBE3DB]/40 mb-4">
                           <User className="w-5 h-5" />
                         </div>
-                        <h3 className="text-base font-extrabold text-[#3E2723]">Basic Member</h3>
-                        <p className="text-[11px] text-warm-muted mt-1">Access the community and see local news.</p>
+                        <h3 className="text-base font-extrabold text-[#3E2723]">{t("dashboardprofile.basicMember")}</h3>
+                        <p className="text-[11px] text-warm-muted mt-1">{t("dashboardprofile.accessTheCommunityAndSeeLocalNews")}</p>
 
                         <div className="mt-4 flex items-baseline gap-1">
                           <span className="text-3xl font-extrabold text-[#3E2723]">₹0</span>
@@ -1766,10 +2014,10 @@ function DashboardStyleHome() {
 
                         <ul className="mt-6 space-y-3">
                           {[
-                            "View Member Directory",
-                            "Join up to 3 Communities",
-                            "Read Public News & Announcements",
-                            "View Public Events list"
+                            t("dashboardprofile.viewMemberDirectory"),
+                            t("dashboardprofile.joinUpTo3Communities"),
+                            t("dashboardprofile.readPublicNewsAndAnnouncements"),
+                            t("dashboardprofile.viewPublicEventsList")
                           ].map((feat, i) => (
                             <li key={i} className="flex gap-2 text-xs font-semibold text-[#5C4033] items-start">
                               <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
@@ -1782,14 +2030,14 @@ function DashboardStyleHome() {
                         disabled={userProfile.membership === "Basic Member"}
                         onClick={() => {
                           setUserProfile({ ...userProfile, membership: "Basic Member" });
-                          alert("Downgraded to Basic Member successfully!");
+                          alert(t("dashboardprofile.downgradedSuccessfully"));
                         }}
                         className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${userProfile.membership === "Basic Member"
-                            ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
-                            : "bg-[#FFF5EE] border border-[#EBE3DB] hover:bg-[#F3E8DE] text-[#3E2723]"
+                          ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
+                          : "bg-[#FFF5EE] border border-[#EBE3DB] hover:bg-[#F3E8DE] text-[#3E2723]"
                           }`}
                       >
-                        {userProfile.membership === "Basic Member" ? "Current Plan" : "Downgrade"}
+                        {userProfile.membership === "Basic Member" ? t("dashboardplan.currentPlan") : t("dashboardplan.downgrade")}
                       </button>
                     </div>
 
@@ -1802,7 +2050,7 @@ function DashboardStyleHome() {
                         <div className="w-10 h-10 rounded-2xl bg-[#FFF5EE] text-[#F97316] flex items-center justify-center border border-[#F3E8DE] mb-4">
                           <Sparkles className="w-5 h-5" />
                         </div>
-                        <h3 className="text-base font-extrabold text-[#3E2723]">Premium Member</h3>
+                        <h3 className="text-base font-extrabold text-[#3E2723]">{t("dashboardprofile.premiumMember")}</h3>
                         <p className="text-[11px] text-warm-muted mt-1">Unlock matrimonial, business directory & jobs.</p>
 
                         <div className="mt-4 flex items-baseline gap-1">
@@ -1830,14 +2078,14 @@ function DashboardStyleHome() {
                         disabled={userProfile.membership === "Premium Member"}
                         onClick={() => {
                           setUserProfile({ ...userProfile, membership: "Premium Member" });
-                          alert("Upgraded to Premium Member successfully! Thank you for your support!");
+                          alert(t("dashboardprofile.upgradedSuccessfully"));
                         }}
                         className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${userProfile.membership === "Premium Member"
-                            ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
-                            : "bg-[#F97316] text-white hover:bg-[#EA580C] shadow-md shadow-[#F97316]/20"
+                          ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
+                          : "bg-[#F97316] text-white hover:bg-[#EA580C] shadow-md shadow-[#F97316]/20"
                           }`}
                       >
-                        {userProfile.membership === "Premium Member" ? "Current Plan" : "Upgrade to Premium"}
+                        {userProfile.membership === "Premium Member" ? t("dashboardplan.currentPlan") : t("dashboardplan.upgradeToPremium")}
                       </button>
                     </div>
 
@@ -1847,7 +2095,7 @@ function DashboardStyleHome() {
                         <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100/50 mb-4">
                           <ShieldCheck className="w-5 h-5" />
                         </div>
-                        <h3 className="text-base font-extrabold text-[#3E2723]">Patron Member</h3>
+                        <h3 className="text-base font-extrabold text-[#3E2723]">{t("dashboardprofile.patronMember")}</h3>
                         <p className="text-[11px] text-warm-muted mt-1">Lifetime VIP member of the Samaj community.</p>
 
                         <div className="mt-4 flex items-baseline gap-1">
@@ -1875,14 +2123,14 @@ function DashboardStyleHome() {
                         disabled={userProfile.membership === "Patron Member"}
                         onClick={() => {
                           setUserProfile({ ...userProfile, membership: "Patron Member" });
-                          alert("Thank you for becoming a Patron Life Member! A physical VIP kit will be shipped to your address.");
+                          alert(t("dashboardprofile.becomePatronMemberSuccess"));
                         }}
                         className={`w-full mt-8 py-2.5 rounded-xl text-xs font-bold transition duration-200 ${userProfile.membership === "Patron Member"
-                            ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
-                            : "bg-purple-600 text-white hover:bg-purple-700 shadow-md shadow-purple-600/20"
+                          ? "bg-[#FAF3EC] border border-[#EBE3DB] text-warm-muted cursor-default"
+                          : "bg-purple-600 text-white hover:bg-purple-700 shadow-md shadow-purple-600/20"
                           }`}
                       >
-                        {userProfile.membership === "Patron Member" ? "Current Plan" : "Become Patron Member"}
+                        {userProfile.membership === "Patron Member" ? t("dashboardplan.currentPlan") : t("dashboardplan.becomePatronMember")}
                       </button>
                     </div>
                   </div>
@@ -1913,9 +2161,9 @@ function DashboardStyleHome() {
               {/* Upcoming Events */}
               <div className="bg-white rounded-[20px] border border-[#EBE3DB] p-4 space-y-3.5 shadow-sm text-left">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-xs text-[#3E2723] tracking-wide">Upcoming Events</h3>
+                  <h3 className="font-bold text-xs text-[#3E2723] tracking-wide">{t("dashboardindex.label_upcomingEvents")}</h3>
                   <button onClick={() => handleNavClick("Events")} className="text-[10px] font-bold text-[#F97316] hover:underline">
-                    View All →
+                    {t("dashboardindex.viewAll")} →
                   </button>
                 </div>
 
@@ -1924,14 +2172,14 @@ function DashboardStyleHome() {
                     <div key={i} className="flex items-center gap-3 group cursor-pointer" onClick={() => handleNavClick("Events")}>
                       {/* Date Block */}
                       <div className="w-10 h-10 rounded-xl bg-[#FFF5EE] border border-[#F3E8DE] flex flex-col items-center justify-center flex-shrink-0 group-hover:border-[#F97316]/30 group-hover:bg-[#FDF2E9] transition duration-200">
-                        <span className="text-xs font-extrabold text-[#F97316] leading-none">{ev.day}</span>
-                        <span className="text-[8px] font-bold text-warm-muted leading-none mt-0.5">{ev.month}</span>
+                        <span className="text-xs font-extrabold text-[#F97316] leading-none">{t(ev.day)}</span>
+                        <span className="text-[8px] font-bold text-warm-muted leading-none mt-0.5">{t(ev.month)}</span>
                       </div>
 
                       <div className="text-xs leading-snug">
-                        <h4 className="font-bold text-[#3E2723] line-clamp-1 group-hover:text-[#F97316] transition duration-200">{ev.title}</h4>
+                        <h4 className="font-bold text-[#3E2723] line-clamp-1 group-hover:text-[#F97316] transition duration-200">{t(ev.title)}</h4>
                         <p className="text-[9px] text-warm-muted flex items-center gap-0.5 mt-0.5">
-                          <MapPin className="w-2.5 h-2.5 text-[#F97316]" /> {ev.location} · {ev.time}
+                          <MapPin className="w-2.5 h-2.5 text-[#F97316]" /> {t(ev.location)} · {t(ev.time)}
                         </p>
                       </div>
                     </div>
@@ -1941,7 +2189,7 @@ function DashboardStyleHome() {
 
               {/* Today's Highlights Timeline */}
               <div className="bg-white rounded-[20px] border border-[#EBE3DB] p-4 space-y-3.5 shadow-sm text-left relative overflow-hidden">
-                <h3 className="font-bold text-xs text-[#3E2723] tracking-wide">Today's Highlights</h3>
+                <h3 className="font-bold text-xs text-[#3E2723] tracking-wide">{t("dashboardindex.todaysHighlights")}</h3>
 
                 <div className="relative space-y-4 pl-1">
                   {/* Timeline vertical connector */}
@@ -1953,9 +2201,9 @@ function DashboardStyleHome() {
                         <item.icon className="w-3.5 h-3.5" />
                       </div>
                       <div className="text-[10px] leading-tight text-left pt-0.5">
-                        <p className="text-warm-muted font-medium">{item.type}</p>
+                        <p className="text-warm-muted font-medium">{t(item.type)}</p>
                         <p className="font-bold text-[#3E2723] mt-0.5">
-                          {item.name} <span className="font-normal text-warm-muted text-[9px]">{item.detail}</span>
+                          {t(item.name)} <span className="font-normal text-warm-muted text-[9px]">{t(item.detail)}</span>
                         </p>
                       </div>
                     </div>
@@ -1982,15 +2230,17 @@ function DashboardStyleHome() {
             className="flex flex-col items-center gap-1 text-[9px] text-[#8C6D58]"
           >
             <item.icon className={`w-5 h-5 ${(activeNav === "Dashboard" && item.label === "Home") || activeNav === item.label
-                ? "text-[#F97316]"
-                : "text-[#8C6D58]"
+              ? "text-[#F97316]"
+              : "text-[#8C6D58]"
               }`} />
             <span className={
               (activeNav === "Dashboard" && item.label === "Home") || activeNav === item.label
                 ? "text-[#F97316] font-bold"
                 : "text-warm-muted font-medium"
             }>
-              {item.label}
+              {item.label === "Home"
+                ? t("sidebar.dashboard")
+                : t("sidebar." + item.label.charAt(0).toLowerCase() + item.label.slice(1).replace(/\s+/g, ""))}
             </span>
           </button>
         ))}
@@ -2161,8 +2411,8 @@ function DashboardStyleHome() {
               <X className="w-4 h-4" />
             </button>
             <div className="space-y-1">
-              <h3 className="font-extrabold text-lg text-[#3E2723]">Register for Event</h3>
-              <p className="text-xs text-warm-muted">{registeringEvent.event.title}</p>
+              <h3 className="font-extrabold text-lg text-[#3E2723]">{t("Register for Event")}</h3>
+              <p className="text-xs text-warm-muted">{t(registeringEvent.event.title)}</p>
             </div>
 
             <form onSubmit={async (e) => {
@@ -2191,7 +2441,7 @@ function DashboardStyleHome() {
               }
             }} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#5C4033]">Your Name</label>
+                <label className="text-xs font-bold text-[#5C4033]">{t("registercommunity.fullName")}</label>
                 <input
                   type="text"
                   required
@@ -2201,7 +2451,7 @@ function DashboardStyleHome() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#5C4033]">Email Address</label>
+                <label className="text-xs font-bold text-[#5C4033]">{t("registercommunity.emailAddress")}</label>
                 <input
                   type="email"
                   required
@@ -2211,7 +2461,7 @@ function DashboardStyleHome() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#5C4033]">Phone Number</label>
+                <label className="text-xs font-bold text-[#5C4033]">{t("registercommunity.phoneNumber")}</label>
                 <input
                   type="text"
                   required
@@ -2221,19 +2471,19 @@ function DashboardStyleHome() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#5C4033]">Number of Attendees</label>
+                <label className="text-xs font-bold text-[#5C4033]">{t("Number of Attendees")}</label>
                 <select
                   value={regForm.attendees}
                   onChange={(e) => setRegForm({ ...regForm, attendees: parseInt(e.target.value) })}
                   className="w-full p-2.5 text-xs rounded-xl border border-[#EBE3DB] bg-white focus:outline-none focus:border-[#F97316]"
                 >
                   {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>{n} {n === 1 ? "Person" : "People"}</option>
+                    <option key={n} value={n}>{n} {n === 1 ? t("Person") : t("People")}</option>
                   ))}
                 </select>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#F97316] text-white text-xs font-bold rounded-xl hover:bg-[#EA580C] shadow-md transition cursor-pointer">
-                Confirm Registration
+                {t("Confirm Registration")}
               </button>
             </form>
           </motion.div>
@@ -2250,9 +2500,9 @@ function DashboardStyleHome() {
 
             <div className="text-center space-y-1">
               <h3 className="font-extrabold text-[#3E2723] text-lg flex items-center justify-center gap-1.5">
-                <Network className="w-5 h-5 text-[#F97316]" /> Family Tree of {selectedFamilyTree.name}
+                <Network className="w-5 h-5 text-[#F97316]" /> {t("Family Tree of")} {t(selectedFamilyTree.name)}
               </h3>
-              <p className="text-xs text-warm-muted">Genealogy and relationships within the samaj</p>
+              <p className="text-xs text-warm-muted">{t("Genealogy and relationships within the samaj")}</p>
             </div>
 
             {/* Visual Family Tree Representation */}
@@ -2316,29 +2566,29 @@ function DashboardStyleHome() {
             </div>
 
             <div className="text-center">
-              <h3 className="font-extrabold text-[#3E2723]">Donation Successful!</h3>
-              <p className="text-xs text-warm-muted mt-1 font-medium">Thank you for supporting your samaj community.</p>
+              <h3 className="font-extrabold text-[#3E2723]">{t("dashboarddonations.donationSuccessful")}</h3>
+              <p className="text-xs text-warm-muted mt-1 font-medium">{t("dashboarddonations.thankYouForSupportingYourSamajCommunity")}</p>
             </div>
 
             <div className="bg-[#FAF3EC] rounded-2xl p-4 text-xs space-y-2 border border-[#EBE3DB]/60">
               <div className="flex justify-between">
-                <span className="text-warm-muted">Donor Name:</span>
+                <span className="text-warm-muted">{t("dashboarddonations.donorName")}:</span>
                 <span className="font-bold text-[#3E2723]">{userProfile.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-warm-muted">Campaign:</span>
+                <span className="text-warm-muted">{t("dashboarddonations.campaign")}:</span>
                 <span className="font-bold text-[#3E2723]">{showReceipt.campaign}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-warm-muted">Transaction ID:</span>
+                <span className="text-warm-muted">{t("dashboarddonations.transactionId")}:</span>
                 <span className="font-mono text-[#3E2723]">{showReceipt.txnId}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-warm-muted">Date:</span>
+                <span className="text-warm-muted">{t("dashboarddonations.date")}:</span>
                 <span className="font-bold text-[#3E2723]">{showReceipt.date}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-[#EBE3DB] text-sm">
-                <span className="font-bold text-[#3E2723]">Amount Paid:</span>
+                <span className="font-bold text-[#3E2723]">{t("dashboarddonations.amountPaid")}:</span>
                 <span className="font-extrabold text-[#F97316]">₹{parseInt(showReceipt.amount).toLocaleString()}</span>
               </div>
             </div>
@@ -2354,10 +2604,10 @@ function DashboardStyleHome() {
               }}
               className="w-full py-2 bg-gradient-to-r from-[#F97316] to-[#EA580C] text-white text-xs font-bold rounded-xl shadow-md flex items-center justify-center gap-1.5 hover:shadow-lg transition cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5" /> Download PDF Receipt
+              <Download className="w-3.5 h-3.5" /> {t("dashboarddonations.downloadPdfReceipt")}
             </button>
             <button onClick={() => setShowReceipt(null)} className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition cursor-pointer">
-              Close Receipt
+              {t("dashboarddonations.closeReceipt")}
             </button>
           </motion.div>
         </div>

@@ -89,6 +89,7 @@ type Message = {
   reply_to_details?: {
     id: number;
     content: string;
+    sender: number;
     sender_name: string;
     image: string | null;
   } | null;

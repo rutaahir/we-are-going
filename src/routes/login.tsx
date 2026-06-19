@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import React, { useState } from "react";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles, Key } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { PageTransition } from "@/components/wag/primitives";
 import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Login — We Are Going" }] }),
+  head: () => ({ meta: [{ title: "Login — WE ARE UNITED" }] }),
   component: App,
 });
 
@@ -45,9 +45,9 @@ function App() {
   const [isDemoOpen, setIsDemoOpen] = useState(false);
 
   const demoAccounts: Record<Role, { u: string, p: string, label: string }> = {
-    member: { u: "rohit@example.com", p: "admin123", label: "Member" },
-    community_admin: { u: "mehul@samaj.org", p: "admin123", label: "Samaj Admin" },
-    super_admin: { u: "admin", p: "admin123", label: "Super Admin" },
+    member: { u: "shahharshil@gmail.com", p: "Admin@123", label: "Member" },
+    community_admin: { u: "shahharshil303@gmaiil.com", p: "Admin@123", label: "Samaj Admin" },
+    super_admin: { u: "admin", p: "Admin@123", label: "Super Admin" },
   };
 
   const handleDemoFill = (role: Role) => {
@@ -68,7 +68,7 @@ function App() {
     setIsLoading(true);
     try {
       const u = await loginWithApi(email, password);
-      toast.success("Success! Welcome back to We Are Going.");
+      toast.success("Success! Welcome back to WE ARE UNITED.");
       setTimeout(() => {
         navigate({ to: dashHomeFor(u.role) });
       }, 800);
@@ -102,7 +102,7 @@ function App() {
                   <path d="M7.5 15.5C7.5 13 9.5 11.5 12 11.5C14.5 11.5 16.5 13 16.5 15.5" strokeLinecap="round" strokeWidth="1.8" />
                 </svg>
               </div>
-              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">We Are Going</h1>
+              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">WE ARE UNITED</h1>
             </div>
           </header>
 
@@ -211,7 +211,7 @@ function App() {
                   <path d="M7.5 15.5C7.5 13 9.5 11.5 12 11.5C14.5 11.5 16.5 13 16.5 15.5" strokeLinecap="round" strokeWidth="1.8" />
                 </svg>
               </div>
-              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">We Are Going</h1>
+              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">WE ARE UNITED</h1>
             </div>
           </header>
 
@@ -292,7 +292,7 @@ function App() {
                   <path d="M7.5 15.5C7.5 13 9.5 11.5 12 11.5C14.5 11.5 16.5 13 16.5 15.5" strokeLinecap="round" strokeWidth="1.8" />
                 </svg>
               </div>
-              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">We Are Going</h1>
+              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">WE ARE UNITED</h1>
             </div>
           </header>
 
@@ -400,7 +400,7 @@ function App() {
                   <path d="M7.5 15.5C7.5 13 9.5 11.5 12 11.5C14.5 11.5 16.5 13 16.5 15.5" strokeLinecap="round" strokeWidth="1.8" />
                 </svg>
               </div>
-              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">We Are Going</h1>
+              <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">WE ARE UNITED</h1>
             </div>
           </header>
 
@@ -568,7 +568,7 @@ function App() {
             </div>
             <div>
               <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">
-                We Are Going
+                WE ARE UNITED
               </h1>
               <p className="text-[11px] text-[#EA580C] font-semibold mt-1 tracking-wider uppercase">
                 Aapni Samaj, Aapnu Network
@@ -881,7 +881,7 @@ function App() {
         {/* FOOTER AREA */}
         <footer className="w-full px-[5%] lg:px-[8%] 2xl:px-[10%] py-6 lg:pb-10 z-20 flex flex-col md:flex-row justify-between items-center text-[#7A6455] text-xs font-semibold gap-2 mt-auto">
           <p className="tracking-wide">
-            © 2026 We Are Going. All rights reserved.
+            © 2026 WE ARE UNITED. All rights reserved.
           </p>
 
           <p className="text-[11px] opacity-75 hidden md:block">
@@ -919,9 +919,9 @@ function App() {
                 className="p-4 rounded-2xl bg-white border border-stone-200/80 hover:border-orange-300 hover:bg-orange-50/40 text-left transition-all active:scale-95 group shadow-sm"
               >
                 <div className="text-xs font-bold text-orange-600 mb-1">Samaj Member</div>
-                <div className="text-[13px] font-extrabold text-[#2C1D12] group-hover:text-orange-900 truncate">Rohit Patel</div>
-                <div className="text-[11px] text-stone-500 mt-2 truncate">rohit@example.com</div>
-                <div className="text-[10px] text-stone-400 font-medium">Password: admin123</div>
+                <div className="text-[13px] font-extrabold text-[#2C1D12] group-hover:text-orange-900 truncate">Harshil Shah</div>
+                <div className="text-[11px] text-stone-500 mt-2 truncate">shahharshil@gmail.com</div>
+                <div className="text-[10px] text-stone-400 font-medium">Password: Admin@123</div>
               </button>
 
               {/* Samaj Admin Card */}
@@ -931,9 +931,9 @@ function App() {
                 className="p-4 rounded-2xl bg-white border border-stone-200/80 hover:border-orange-300 hover:bg-orange-50/40 text-left transition-all active:scale-95 group shadow-sm"
               >
                 <div className="text-xs font-bold text-orange-600 mb-1">Samaj Admin</div>
-                <div className="text-[13px] font-extrabold text-[#2C1D12] group-hover:text-orange-900 truncate">Mehul Shah</div>
-                <div className="text-[11px] text-stone-500 mt-2 truncate">mehul@samaj.org</div>
-                <div className="text-[10px] text-stone-400 font-medium">Password: admin123</div>
+                <div className="text-[13px] font-extrabold text-[#2C1D12] group-hover:text-orange-900 truncate">Harshil Shah (Admin)</div>
+                <div className="text-[11px] text-stone-500 mt-2 truncate">shahharshil303@gmaiil.com</div>
+                <div className="text-[10px] text-stone-400 font-medium">Password: Admin@123</div>
               </button>
 
               {/* Super Admin Card */}
@@ -945,7 +945,7 @@ function App() {
                 <div className="text-xs font-bold text-orange-600 mb-1">Super Admin</div>
                 <div className="text-[13px] font-extrabold text-[#2C1D12] group-hover:text-orange-900 truncate">System Root</div>
                 <div className="text-[11px] text-stone-500 mt-2 truncate">admin</div>
-                <div className="text-[10px] text-stone-400 font-medium">Password: admin123</div>
+                <div className="text-[10px] text-stone-400 font-medium">Password: Admin@123</div>
               </button>
 
             </div>

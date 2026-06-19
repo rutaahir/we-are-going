@@ -32,13 +32,13 @@ export default function Footer() {
           <ul className="space-y-3 text-sm text-warm-muted">
             <li className="flex items-start gap-2"><MapPin className="w-4 h-4 mt-0.5 text-gold" />Rajula, Amreli, Gujarat 365560</li>
             <li className="flex items-center gap-2"><Phone className="w-4 h-4 text-gold" />+91 98240 12345</li>
-            <li className="flex items-center gap-2"><Mail className="w-4 h-4 text-gold" />hello@wearegoing.in</li>
+            <li className="flex items-center gap-2"><Mail className="w-4 h-4 text-gold" />hello@weareunited.in</li>
           </ul>
         </div>
       </div>
       <div className="border-t border-warm">
         <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-warm-muted">
-          <div>© 2026 We Are Going. All rights reserved.</div>
+          <div>© 2026 WE ARE UNITED. All rights reserved.</div>
           <div>Made with <span className="text-red-500">♥</span> for Indian communities</div>
         </div>
       </div>

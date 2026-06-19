@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/context/AuthContext";
 import { DashboardSidebar, MobileBottomNav, MobileHeader, type SidebarItem } from "@/components/wag/Sidebar";
-import { LayoutDashboard, User, Users, Building2, Heart, Briefcase, Calendar, HandHeart, Bell, CreditCard, Settings, UsersRound, MessageSquare, Network, CalendarCheck } from "lucide-react";
+import { LayoutDashboard, User, Users, Building2, Heart, Briefcase, Calendar, HandHeart, Bell, CreditCard, Settings, UsersRound, MessageSquare, Network, CalendarCheck, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "@/lib/api";
@@ -21,6 +21,7 @@ const ITEMS: SidebarItem[] = [
   { to: "/dashboard/jobs", label: "Jobs", icon: Briefcase },
   { to: "/dashboard/events", label: "Events", icon: Calendar },
   { to: "/dashboard/donations", label: "Donations", icon: HandHeart },
+  { to: "/dashboard/venues", label: "Venues", icon: MapPin },
   { to: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { to: "/dashboard/messages", label: "Messages", icon: MessageSquare },
   { to: "/dashboard/plan", label: "My Plan", icon: CreditCard },

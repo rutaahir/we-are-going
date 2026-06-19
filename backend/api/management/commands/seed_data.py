@@ -32,7 +32,7 @@ class Command(BaseCommand):
         
         # 1. Create Superuser if not exists
         if not User.objects.filter(username='admin').exists():
-            admin_user = User.objects.create_superuser('admin', 'admin@wearegoing.in', 'admin123')
+            admin_user = User.objects.create_superuser('admin', 'admin@weareunited.in', 'admin123')
             self.stdout.write('Superuser "admin" with password "admin123" created.')
         else:
             admin_user = User.objects.get(username='admin')
@@ -141,7 +141,7 @@ class Command(BaseCommand):
             avatar_url="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop",
             age=40,
             gender="Male",
-            email="admin@wearegoing.in",
+            email="admin@weareunited.in",
             phone="+91 9000012345",
             village="Rajula",
             profession="Chartered Accountant",

@@ -141,3 +141,45 @@ class EmailLogAdmin(admin.ModelAdmin):
     list_filter = ('status', 'trigger_event')
     search_fields = ('recipient', 'subject')
 
+from .models import (
+    BookingProperty, PropertyResource, ResourcePricing, ResourceLock,
+    VenueBooking, BookingInspection, BookingRefund, BookingWaitingList
+)
+
+@admin.register(BookingProperty)
+class BookingPropertyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'community', 'property_type', 'status', 'ownership')
+    list_filter = ('status', 'property_type', 'community')
+    search_fields = ('name', 'city')
+
+@admin.register(PropertyResource)
+class PropertyResourceAdmin(admin.ModelAdmin):
+    list_display = ('name', 'property', 'resource_type', 'booking_type', 'status')
+    list_filter = ('status', 'booking_type')
+    search_fields = ('name',)
+
+@admin.register(ResourcePricing)
+class ResourcePricingAdmin(admin.ModelAdmin):
+    list_display = ('resource', 'member_type', 'seasonality', 'price')
+    list_filter = ('member_type', 'seasonality')
+
+@admin.register(VenueBooking)
+class VenueBookingAdmin(admin.ModelAdmin):
+    list_display = ('booking_number', 'event_name', 'property', 'member', 'status', 'payment_status', 'start_date')
+    list_filter = ('status', 'payment_status')
+    search_fields = ('booking_number', 'event_name')
+
+@admin.register(BookingInspection)
+class BookingInspectionAdmin(admin.ModelAdmin):
+    list_display = ('booking', 'deposit_settlement_status', 'total_additional_charges')
+    list_filter = ('deposit_settlement_status',)
+
+@admin.register(BookingRefund)
+class BookingRefundAdmin(admin.ModelAdmin):
+    list_display = ('booking', 'amount', 'status')
+    list_filter = ('status',)
+
+@admin.register(BookingWaitingList)
+class BookingWaitingListAdmin(admin.ModelAdmin):
+    list_display = ('property', 'member', 'position', 'notified')
+    list_filter = ('notified',)

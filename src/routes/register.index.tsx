@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, CheckCircle2, Upload, User, Eye, EyeOff, Mail, Lock, Phone } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, Upload, User, Eye, EyeOff, Mail, Lock, Phone, Clock, MapPin, Globe, Instagram, Facebook, Youtube, Linkedin, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { calculateAge } from "@/lib/utils";
@@ -15,7 +15,7 @@ import {
 import { PageTransition } from "@/components/wag/primitives";
 
 export const Route = createFileRoute("/register/")({
-  head: () => ({ meta: [{ title: "Register — We Are Going" }] }),
+  head: () => ({ meta: [{ title: "Register — WE ARE UNITED" }] }),
   component: Register,
 });
 
@@ -72,6 +72,15 @@ function Register() {
       school: "", college: "", degree: "", fieldOfStudy: "", passingYear: "",
       professionType: "Job", jobTitle: "", company: "", industry: "", salary: "",
       businessName: "", businessCategory: "", gstNo: "", businessYears: "",
+      businessDesc: "", businessPhone: "", businessWhatsapp: "", businessEmail: "", businessWebsite: "",
+      businessAddress: "", businessCity: "", businessState: "", businessPincode: "",
+      businessHours: {
+        Monday: "09:00 AM - 07:00 PM", Tuesday: "09:00 AM - 07:00 PM",
+        Wednesday: "09:00 AM - 07:00 PM", Thursday: "09:00 AM - 07:00 PM",
+        Friday: "09:00 AM - 07:00 PM", Saturday: "09:00 AM - 05:00 PM",
+        Sunday: "Closed"
+      },
+      businessInstagram: "", businessFacebook: "", businessYoutube: "", businessLinkedin: "",
       cState: "Gujarat", cDistrict: "Amreli", cTaluka: "Rajula", communityName: "Rampara Ahir Samaj", communityId: "",
       aadhaarNo: "", aadhaarPhoto: ""
     };
@@ -97,6 +106,12 @@ function Register() {
       }
     };
   }, []);
+
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
+  const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
 
   const updateField = (key: string, val: any) => {
     setFormData((prev: any) => ({ ...prev, [key]: val }));
@@ -239,40 +254,61 @@ function Register() {
         const cleanName = formData.fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
         const username = `${cleanName || "user"}_${Math.floor(100 + Math.random() * 900)}`;
 
-        const registrationPayload = {
-          username: username,
-          password: formData.password || "User123!",
-          email: formData.email || `${username}@example.com`,
-          name: formData.fullName,
-          phone: formData.mobile,
-          gender: formData.gender,
-          age: age,
-          state: formData.state,
-          district: formData.district,
-          taluka: formData.taluka,
-          village: formData.village || "Rampara",
-          profession: formData.professionType === "Job" ? formData.jobTitle : formData.businessName,
-          education: formData.degree || "Graduate",
-          school: formData.school,
-          college: formData.college,
-          degree: formData.degree,
-          fieldOfStudy: formData.fieldOfStudy,
-          passingYear: formData.passingYear,
-          professionType: formData.professionType,
-          jobTitle: formData.jobTitle,
-          company: formData.company,
-          industry: formData.industry,
-          salary: formData.salary,
-          businessName: formData.businessName,
-          businessCategory: formData.businessCategory,
-          gstNo: formData.gstNo,
-          businessYears: formData.businessYears,
-          communityId: parseInt(formData.communityId, 10) || 1,
-          role: "member",
-          aadhaar: formData.aadhaarNo
-        };
+        const fd = new FormData();
+        fd.append("username", username);
+        fd.append("password", formData.password || "User123!");
+        fd.append("email", formData.email || `${username}@example.com`);
+        fd.append("name", formData.fullName);
+        fd.append("phone", formData.mobile);
+        fd.append("gender", formData.gender);
+        fd.append("age", String(age));
+        fd.append("state", formData.state);
+        fd.append("district", formData.district);
+        fd.append("taluka", formData.taluka);
+        fd.append("village", formData.village || "Rampara");
+        fd.append("profession", formData.professionType === "Job" ? formData.jobTitle : formData.businessName);
+        fd.append("education", formData.degree || "Graduate");
+        fd.append("school", formData.school || "");
+        fd.append("college", formData.college || "");
+        fd.append("degree", formData.degree || "");
+        fd.append("fieldOfStudy", formData.fieldOfStudy || "");
+        fd.append("passingYear", formData.passingYear || "");
+        fd.append("professionType", formData.professionType);
+        fd.append("jobTitle", formData.jobTitle || "");
+        fd.append("company", formData.company || "");
+        fd.append("industry", formData.industry || "");
+        fd.append("salary", formData.salary || "");
+        fd.append("businessName", formData.businessName || "");
+        fd.append("businessCategory", formData.businessCategory || "");
+        fd.append("gstNo", formData.gstNo || "");
+        fd.append("businessYears", formData.businessYears || "");
+        fd.append("businessDesc", formData.businessDesc || "");
+        fd.append("businessPhone", formData.businessPhone || "");
+        fd.append("businessWhatsapp", formData.businessWhatsapp || "");
+        fd.append("businessEmail", formData.businessEmail || "");
+        fd.append("businessWebsite", formData.businessWebsite || "");
+        fd.append("businessAddress", formData.businessAddress || "");
+        fd.append("businessCity", formData.businessCity || "");
+        fd.append("businessState", formData.businessState || "");
+        fd.append("businessPincode", formData.businessPincode || "");
+        fd.append("businessHours", JSON.stringify(formData.businessHours));
+        fd.append("businessInstagram", formData.businessInstagram || "");
+        fd.append("businessFacebook", formData.businessFacebook || "");
+        fd.append("businessYoutube", formData.businessYoutube || "");
+        fd.append("businessLinkedin", formData.businessLinkedin || "");
+        fd.append("communityId", String(parseInt(formData.communityId, 10) || 1));
+        fd.append("role", "member");
+        fd.append("aadhaar", formData.aadhaarNo);
 
-        await api.register(registrationPayload);
+        if (avatarFile) fd.append("avatar", avatarFile);
+        if (aadhaarFile) fd.append("aadhaar_photo", aadhaarFile);
+        if (logoFile) fd.append("business_logo", logoFile);
+
+        galleryFiles.forEach((file, idx) => {
+          fd.append(`business_gallery_${idx}`, file);
+        });
+
+        await api.register(fd);
         setVerificationPending(true);
       } catch (err: any) {
         console.error("Member registration failed: ", err);
@@ -376,7 +412,7 @@ function Register() {
             </div>
             <div>
               <h1 className="font-extrabold text-[17px] text-[#3D1A00] tracking-tight leading-none">
-                We Are Going
+                WE ARE UNITED
               </h1>
               <p className="text-[11px] text-[#EA580C] font-semibold mt-1 tracking-wider uppercase">
                 Aapni Samaj, Aapnu Network
@@ -602,13 +638,33 @@ function Register() {
                         onChange={updateField}
                         setIsEmailFocused={setIsEmailFocused}
                         setIsPasswordFocused={setIsPasswordFocused}
+                        avatarFile={avatarFile}
+                        setAvatarFile={setAvatarFile}
                       />
                     )}
                     {step === 1 && <LocationStep data={formData} onChange={updateField} />}
                     {step === 2 && <Education data={formData} onChange={updateField} />}
-                    {step === 3 && <Profession data={formData} onChange={updateField} />}
+                    {step === 3 && (
+                      <Profession
+                        data={formData}
+                        onChange={updateField}
+                        logoFile={logoFile}
+                        setLogoFile={setLogoFile}
+                        galleryFiles={galleryFiles}
+                        setGalleryFiles={setGalleryFiles}
+                        galleryPreviews={galleryPreviews}
+                        setGalleryPreviews={setGalleryPreviews}
+                      />
+                    )}
                     {step === 4 && <Community data={formData} onChange={updateField} communities={communitiesList} />}
-                    {step === 5 && <Verify data={formData} onChange={updateField} />}
+                    {step === 5 && (
+                      <Verify
+                        data={formData}
+                        onChange={updateField}
+                        aadhaarFile={aadhaarFile}
+                        setAadhaarFile={setAadhaarFile}
+                      />
+                    )}
                   </motion.div>
                 </AnimatePresence>
 
@@ -643,7 +699,7 @@ function Register() {
         {/* FOOTER AREA */}
         <footer className="w-full max-w-7xl mx-auto px-6 lg:px-8 xl:px-12 py-4 lg:py-6 z-20 flex flex-col md:flex-row justify-between items-center text-[#7A6455] text-[11px] font-semibold gap-2 mt-auto">
           <p className="tracking-wide">
-            © 2026 We Are Going. All rights reserved.
+            © 2026 WE ARE UNITED. All rights reserved.
           </p>
           <p className="opacity-75 hidden md:block">
             Gujarati Community Network
@@ -776,11 +832,13 @@ const BlobDateOfBirth = ({ value, onChange }: { value: string; onChange: (val: s
 };
 
 function Personal({
-  data, onChange, setIsEmailFocused, setIsPasswordFocused
+  data, onChange, setIsEmailFocused, setIsPasswordFocused, avatarFile, setAvatarFile
 }: {
   data: any; onChange: (key: string, val: any) => void;
   setIsEmailFocused: (val: boolean) => void;
   setIsPasswordFocused: (val: boolean) => void;
+  avatarFile: File | null;
+  setAvatarFile: (f: File | null) => void;
 }) {
   const [showPwd, setShowPwd] = useState(false);
 
@@ -797,7 +855,13 @@ function Personal({
               <Upload className="w-3.5 h-3.5" />
             </div>
           </div>
-          <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onChange("photo", URL.createObjectURL(f)); }} />
+          <input type="file" accept="image/*" className="hidden" onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) {
+              setAvatarFile(f);
+              onChange("photo", URL.createObjectURL(f));
+            }
+          }} />
 
           <div className="flex flex-col justify-center">
             <h3 className="text-[#2C1D12] font-extrabold text-base tracking-tight">Upload photo</h3>
@@ -1081,14 +1145,90 @@ function Education({ data, onChange }: { data: any; onChange: (key: string, val:
   );
 }
 
-function Profession({ data, onChange }: { data: any; onChange: (key: string, val: any) => void }) {
+const BIZ_CATEGORIES_REG = [
+  "Food & Bakery", "Manufacturing", "Jewellery", "Healthcare", "Textile",
+  "Construction", "Automobile", "Professional", "Education", "Technology",
+  "Retail", "Agriculture", "Finance", "Transport", "Other"
+];
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+const TIME_OPTIONS = [
+  "Closed", "Open 24 Hours",
+  "06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM",
+  "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM",
+  "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM", "10:00 PM"
+];
+
+function Profession({
+  data,
+  onChange,
+  logoFile,
+  setLogoFile,
+  galleryFiles,
+  setGalleryFiles,
+  galleryPreviews,
+  setGalleryPreviews
+}: {
+  data: any;
+  onChange: (key: string, val: any) => void;
+  logoFile: File | null;
+  setLogoFile: (f: File | null) => void;
+  galleryFiles: File[];
+  setGalleryFiles: (files: File[]) => void;
+  galleryPreviews: string[];
+  setGalleryPreviews: (previews: string[]) => void;
+}) {
+  const [bizTab, setBizTab] = useState<"basic" | "contact" | "hours">("basic");
+
+  const updateHours = (day: string, val: string) => {
+    onChange("businessHours", { ...data.businessHours, [day]: val });
+  };
+
+  const parseHour = (dayVal: string, part: "open" | "close") => {
+    if (!dayVal || dayVal === "Closed" || dayVal === "Open 24 Hours") return "";
+    const parts = dayVal.split(" - ");
+    return part === "open" ? (parts[0] || "") : (parts[1] || "");
+  };
+
+  const setHourPart = (day: string, part: "open" | "close", val: string) => {
+    const current = data.businessHours?.[day] || "";
+    if (val === "Closed" || val === "Open 24 Hours") {
+      updateHours(day, val);
+      return;
+    }
+    const open = part === "open" ? val : parseHour(current, "open");
+    const close = part === "close" ? val : parseHour(current, "close");
+    if (open && close) updateHours(day, `${open} - ${close}`);
+    else if (open) updateHours(day, open);
+  };
+
+  const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const newFiles = [...galleryFiles, ...files].slice(0, 10);
+    setGalleryFiles(newFiles);
+    setGalleryPreviews(newFiles.map(f => URL.createObjectURL(f)));
+  };
+
+  const removeGalleryPhoto = (index: number) => {
+    const newFiles = galleryFiles.filter((_, i) => i !== index);
+    setGalleryFiles(newFiles);
+    setGalleryPreviews(newFiles.map(f => URL.createObjectURL(f)));
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="relative w-full pt-4">
+    <div className="space-y-5">
+      {/* Profession Type Toggle */}
+      <div className="relative w-full">
         <span className="text-[11px] font-bold text-[#EA580C] uppercase tracking-wider block mb-2">Profession Type</span>
         <div className="flex items-center w-full p-1 bg-white border border-[#E6D9C8] rounded-full shadow-sm">
           {(["Job", "Business"] as const).map(x => (
-            <button key={x} type="button" onClick={() => onChange("professionType", x)} className={`flex-1 py-2 rounded-full text-xs font-bold transition-all duration-300 ${data.professionType === x ? "bg-gradient-to-r from-[#F25C05] to-[#FFA74D] text-white shadow-sm" : "text-[#7A6455] hover:bg-orange-50 hover:text-orange-900"}`}>
+            <button key={x} type="button" onClick={() => onChange("professionType", x)}
+              className={`flex-1 py-2 rounded-full text-xs font-bold transition-all duration-300 ${
+                data.professionType === x
+                  ? "bg-gradient-to-r from-[#F25C05] to-[#FFA74D] text-white shadow-sm"
+                  : "text-[#7A6455] hover:bg-orange-50 hover:text-orange-900"
+              }`}>
               {x}
             </button>
           ))}
@@ -1096,23 +1236,174 @@ function Profession({ data, onChange }: { data: any; onChange: (key: string, val
       </div>
 
       <AnimatePresence mode="wait">
-        <motion.div key={data.professionType} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid sm:grid-cols-2 gap-x-6 gap-y-6">
-          {data.professionType === "Job" ? (
-            <>
-              <BlobInput label="Job Title" value={data.jobTitle} onChange={(e: any) => onChange("jobTitle", e.target.value)} placeholder="" />
-              <BlobInput label="Company" value={data.company} onChange={(e: any) => onChange("company", e.target.value)} placeholder="" />
-              <BlobInput label="Industry" value={data.industry} onChange={(e: any) => onChange("industry", e.target.value)} placeholder="" />
-              <BlobInput label="Annual Salary (LPA)" type="number" value={data.salary} onChange={(e: any) => onChange("salary", e.target.value)} placeholder="" />
-            </>
-          ) : (
-            <>
-              <BlobInput label="Business Name" value={data.businessName} onChange={(e: any) => onChange("businessName", e.target.value)} placeholder="" />
-              <BlobInput label="Category" value={data.businessCategory} onChange={(e: any) => onChange("businessCategory", e.target.value)} placeholder="" />
-              <BlobInput label="GST No." value={data.gstNo} onChange={(e: any) => onChange("gstNo", e.target.value)} placeholder="" />
-              <BlobInput label="Years in Business" type="number" value={data.businessYears} onChange={(e: any) => onChange("businessYears", e.target.value)} placeholder="" />
-            </>
-          )}
-        </motion.div>
+        {data.professionType === "Job" ? (
+          <motion.div key="job" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid sm:grid-cols-2 gap-x-6 gap-y-5">
+            <BlobInput label="Job Title" value={data.jobTitle} onChange={(e: any) => onChange("jobTitle", e.target.value)} placeholder="" />
+            <BlobInput label="Company" value={data.company} onChange={(e: any) => onChange("company", e.target.value)} placeholder="" />
+            <BlobInput label="Industry" value={data.industry} onChange={(e: any) => onChange("industry", e.target.value)} placeholder="" />
+            <BlobInput label="Annual Salary (LPA)" type="number" value={data.salary} onChange={(e: any) => onChange("salary", e.target.value)} placeholder="" />
+          </motion.div>
+        ) : (
+          <motion.div key="business" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+            {/* Sub-tabs */}
+            <div className="flex gap-1 bg-orange-50/60 border border-[#E6D9C8] rounded-2xl p-1">
+              {(["basic", "contact", "hours"] as const).map(tab => (
+                <button key={tab} type="button" onClick={() => setBizTab(tab)}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all ${
+                    bizTab === tab
+                      ? "bg-gradient-to-r from-[#F25C05] to-[#FFA74D] text-white shadow-sm"
+                      : "text-[#7A6455] hover:text-[#EA580C]"
+                  }`}>
+                  {tab === "basic" ? "Basic Info" : tab === "contact" ? "Contact & Location" : "Hours & Socials"}
+                </button>
+              ))}
+            </div>
+
+            {/* TAB: Basic Info */}
+            {bizTab === "basic" && (
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <BlobInput label="Business / Shop Name *" value={data.businessName} onChange={(e: any) => onChange("businessName", e.target.value)} placeholder="" />
+                  <BlobSelect label="Category / Sector *" options={BIZ_CATEGORIES_REG} value={data.businessCategory} onChange={v => onChange("businessCategory", v)} />
+                  <BlobInput label="GST Number" value={data.gstNo} onChange={(e: any) => onChange("gstNo", e.target.value)} placeholder="" />
+                  <BlobInput label="Years in Business *" type="number" min="0" value={data.businessYears} onChange={(e: any) => onChange("businessYears", e.target.value)} placeholder="" />
+                </div>
+                {/* Business Logo upload */}
+                <div>
+                  <span className="text-[11px] font-bold text-[#EA580C] uppercase tracking-wider block mb-2">Business Logo</span>
+                  <label className="flex items-center gap-4 border border-dashed border-[#E6D9C8] hover:border-orange-400 bg-white/50 rounded-2xl p-4 cursor-pointer transition-all group">
+                    <div className="w-14 h-14 rounded-xl bg-orange-50 flex items-center justify-center border border-orange-100 overflow-hidden shrink-0">
+                      {data.businessLogo
+                        ? <img src={data.businessLogo} alt="" className="w-full h-full object-cover" />
+                        : <Upload className="w-5 h-5 text-[#EA580C]" />}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-[#2C1D12]">{data.businessLogo ? "Logo selected ✓" : "Upload Business Logo"}</div>
+                      <div className="text-[11px] text-[#7A6455] font-semibold mt-0.5">PNG, JPG (square, max 2MB)</div>
+                    </div>
+                    <input type="file" accept="image/*" className="hidden" onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setLogoFile(f);
+                        onChange("businessLogo", URL.createObjectURL(f));
+                      }
+                    }} />
+                  </label>
+                </div>
+                {/* Business Gallery Photos */}
+                <div>
+                  <span className="text-[11px] font-bold text-[#EA580C] uppercase tracking-wider block mb-2">Business Photos (Gallery)</span>
+                  <label className="flex flex-col items-center justify-center border border-dashed border-[#E6D9C8] hover:border-orange-400 bg-white/50 rounded-2xl p-6 cursor-pointer transition-all group">
+                    <Upload className="w-6 h-6 text-[#EA580C] mb-2 group-hover:scale-110 transition-transform" />
+                    <div className="text-sm font-bold text-[#2C1D12]">Select Business Photos</div>
+                    <div className="text-[11px] text-[#7A6455] font-semibold mt-0.5">PNG, JPG (up to 10 photos, max 2MB each)</div>
+                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleGalleryChange} />
+                  </label>
+                  
+                  {/* Selected Gallery Previews */}
+                  {galleryPreviews.length > 0 && (
+                    <div className="grid grid-cols-5 gap-2 mt-3">
+                      {galleryPreviews.map((src, idx) => (
+                        <div key={idx} className="relative aspect-video rounded-xl overflow-hidden border border-[#E6D9C8] bg-orange-50 group">
+                          <img src={src} alt="" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => removeGalleryPhoto(idx)}
+                            className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white rounded-xl">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Description */}
+                <div className="bg-white/60 border border-[#E6D9C8] rounded-2xl p-3 px-4 focus-within:border-[#EA580C] focus-within:bg-white transition-all">
+                  <span className="text-[10px] font-bold text-[#EA580C] uppercase tracking-wider block mb-1">Public Description</span>
+                  <textarea rows={3} value={data.businessDesc} onChange={e => onChange("businessDesc", e.target.value)}
+                    className="w-full bg-transparent border-none outline-none text-sm text-[#2C1D12] font-bold resize-none focus:ring-0"
+                    placeholder="Briefly describe your products & services..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Contact & Location */}
+            {bizTab === "contact" && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <BlobInput label="Business Phone" type="tel" icon={Phone} value={data.businessPhone} onChange={(e: any) => onChange("businessPhone", e.target.value)} placeholder="" />
+                <BlobInput label="WhatsApp Number" type="tel" icon={Phone} value={data.businessWhatsapp} onChange={(e: any) => onChange("businessWhatsapp", e.target.value)} placeholder="" />
+                <BlobInput label="Business Email" type="email" icon={Mail} value={data.businessEmail} onChange={(e: any) => onChange("businessEmail", e.target.value)} placeholder="" />
+                <BlobInput label="Website URL" type="url" icon={Globe} value={data.businessWebsite} onChange={(e: any) => onChange("businessWebsite", e.target.value)} placeholder="" />
+                <div className="sm:col-span-2 bg-white/60 border border-[#E6D9C8] rounded-2xl p-3 px-4 focus-within:border-[#EA580C] focus-within:bg-white transition-all">
+                  <span className="text-[10px] font-bold text-[#EA580C] uppercase tracking-wider block mb-1">Business Address</span>
+                  <textarea rows={2} value={data.businessAddress} onChange={e => onChange("businessAddress", e.target.value)}
+                    className="w-full bg-transparent border-none outline-none text-sm text-[#2C1D12] font-bold resize-none focus:ring-0"
+                    placeholder="Street, Area, Landmark..."
+                  />
+                </div>
+                <BlobInput label="City" icon={MapPin} value={data.businessCity} onChange={(e: any) => onChange("businessCity", e.target.value)} placeholder="" />
+                <BlobInput label="State" value={data.businessState} onChange={(e: any) => onChange("businessState", e.target.value)} placeholder="" />
+                <BlobInput label="Pincode" type="number" value={data.businessPincode} onChange={(e: any) => onChange("businessPincode", e.target.value)} placeholder="" />
+              </div>
+            )}
+
+            {/* TAB: Hours & Socials */}
+            {bizTab === "hours" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-[#EA580C] uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" /> Operating Hours
+                  </span>
+                  {DAYS.map(day => {
+                    const val = data.businessHours?.[day] || "Closed";
+                    const isClosed = val === "Closed";
+                    const isAllDay = val === "Open 24 Hours";
+                    return (
+                      <div key={day} className="flex items-center gap-2 bg-white/60 border border-[#E6D9C8] rounded-xl px-3 py-2">
+                        <span className="text-[11px] font-bold text-[#2C1D12] w-24 shrink-0">{day}</span>
+                        <select value={isClosed ? "Closed" : isAllDay ? "Open 24 Hours" : "custom"}
+                          onChange={e => {
+                            if (e.target.value === "Closed") updateHours(day, "Closed");
+                            else if (e.target.value === "Open 24 Hours") updateHours(day, "Open 24 Hours");
+                            else updateHours(day, "09:00 AM - 07:00 PM");
+                          }}
+                          className="text-[11px] bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 font-bold text-[#EA580C] focus:outline-none">
+                          <option value="Closed">Closed</option>
+                          <option value="Open 24 Hours">Open 24 Hours</option>
+                          <option value="custom">Custom Hours</option>
+                        </select>
+                        {!isClosed && !isAllDay && (
+                          <>
+                            <select value={parseHour(val, "open")}
+                              onChange={e => setHourPart(day, "open", e.target.value)}
+                              className="text-[11px] bg-white border border-[#E6D9C8] rounded-lg px-2 py-1 font-semibold text-[#2C1D12] focus:outline-none flex-1">
+                              <option value="">Open</option>
+                              {TIME_OPTIONS.filter(t => t !== "Closed" && t !== "Open 24 Hours").map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <span className="text-[11px] text-[#7A6455] font-bold">–</span>
+                            <select value={parseHour(val, "close")}
+                              onChange={e => setHourPart(day, "close", e.target.value)}
+                              className="text-[11px] bg-white border border-[#E6D9C8] rounded-lg px-2 py-1 font-semibold text-[#2C1D12] focus:outline-none flex-1">
+                              <option value="">Close</option>
+                              {TIME_OPTIONS.filter(t => t !== "Closed" && t !== "Open 24 Hours").map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-3">
+                  <span className="text-[11px] font-bold text-[#EA580C] uppercase tracking-wider block">Social Media Links</span>
+                  <BlobInput label="Instagram" icon={Instagram} value={data.businessInstagram} onChange={(e: any) => onChange("businessInstagram", e.target.value)} placeholder="" />
+                  <BlobInput label="Facebook" icon={Facebook} value={data.businessFacebook} onChange={(e: any) => onChange("businessFacebook", e.target.value)} placeholder="" />
+                  <BlobInput label="YouTube" icon={Youtube} value={data.businessYoutube} onChange={(e: any) => onChange("businessYoutube", e.target.value)} placeholder="" />
+                  <BlobInput label="LinkedIn" icon={Linkedin} value={data.businessLinkedin} onChange={(e: any) => onChange("businessLinkedin", e.target.value)} placeholder="" />
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -1196,7 +1487,13 @@ function Community({ data, onChange, communities }: { data: any; onChange: (key:
   );
 }
 
-function Verify({ data, onChange }: { data: any; onChange: (key: string, val: any) => void }) {
+function Verify({
+  data, onChange, aadhaarFile, setAadhaarFile
+}: {
+  data: any; onChange: (key: string, val: any) => void;
+  aadhaarFile: File | null;
+  setAadhaarFile: (f: File | null) => void;
+}) {
   return (
     <div className="space-y-6">
       <BlobInput label="Aadhaar Number" placeholder="" value={data.aadhaarNo} onChange={(e: any) => onChange("aadhaarNo", e.target.value)} />
@@ -1209,7 +1506,13 @@ function Verify({ data, onChange }: { data: any; onChange: (key: string, val: an
           </div>
           <div className="text-sm font-bold text-[#2C1D12]">{data.aadhaarPhoto ? `Selected: ${data.aadhaarPhoto}` : "Upload Aadhaar Photo"}</div>
           <div className="text-[11px] font-semibold text-[#EA580C] uppercase tracking-wider mt-1">{data.aadhaarPhoto ? "Click to replace" : "PDF, JPG or PNG (max 5MB)"}</div>
-          <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onChange("aadhaarPhoto", f.name); }} />
+          <input type="file" className="hidden" onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) {
+              setAadhaarFile(f);
+              onChange("aadhaarPhoto", f.name);
+            }
+          }} />
         </label>
       </div>
 

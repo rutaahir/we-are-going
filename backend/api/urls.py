@@ -9,7 +9,10 @@ from .views import (
     SubscriptionPlanViewSet, RoleViewSet, AdvertisementViewSet, GalleryViewSet,
     ForgotPasswordView, ResetPasswordView, ChangePasswordView, VerifyForgotOTPView,
     RegisterSendOTPView, RegisterVerifyOTPView, JobApplicationViewSet,
-    MessageRequestViewSet, ConversationViewSet, MessageViewSet
+    MessageRequestViewSet, ConversationViewSet, MessageViewSet,
+    BookingPropertyViewSet, PropertyResourceViewSet, ResourcePricingViewSet,
+    VenueBookingViewSet, BookingInspectionViewSet, BookingRefundViewSet, BookingWaitingListViewSet,
+    ResourceLockViewSet, ResourceDependencyViewSet
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -38,7 +41,15 @@ router.register(r'gallery', GalleryViewSet, basename='gallery')
 router.register(r'message-requests', MessageRequestViewSet, basename='message-request')
 router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'messages', MessageViewSet, basename='message')
-
+router.register(r'booking-properties', BookingPropertyViewSet, basename='booking-property')
+router.register(r'property-resources', PropertyResourceViewSet, basename='property-resource')
+router.register(r'resource-pricing', ResourcePricingViewSet, basename='resource-pricing')
+router.register(r'venue-bookings', VenueBookingViewSet, basename='venue-booking')
+router.register(r'booking-inspections', BookingInspectionViewSet, basename='booking-inspection')
+router.register(r'booking-refunds', BookingRefundViewSet, basename='booking-refund')
+router.register(r'booking-waiting-list', BookingWaitingListViewSet, basename='booking-waiting-list')
+router.register(r'resource-locks', ResourceLockViewSet, basename='resource-lock')
+router.register(r'resource-dependencies', ResourceDependencyViewSet, basename='resource-dependency')
 
 urlpatterns = [
     # Router endpoints

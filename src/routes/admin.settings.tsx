@@ -74,9 +74,9 @@ function Body() {
           {tab === "general" && (
             <Section icon={<Globe className="w-5 h-5" />} title="General" desc="Platform-wide identity and locale">
               <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Platform name"><input defaultValue="We Are Going" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
+                <Field label="Platform name"><input defaultValue="WE ARE UNITED" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
                 <Field label="Tagline"><input defaultValue="Aapni Samaj, Aapnu Network" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
-                <Field label="Support email"><input defaultValue="support@wearegoing.in" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
+                <Field label="Support email"><input defaultValue="support@weareunited.in" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
                 <Field label="Timezone"><select defaultValue="IST" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm"><option>IST (UTC+5:30)</option><option>UTC</option><option>EST</option></select></Field>
                 <Field label="Default language"><select defaultValue="en" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm"><option value="en">English</option><option value="hi">हिन्दी</option><option value="gu">ગુજરાતી</option></select></Field>
                 <Field label="Currency"><select defaultValue="INR" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm"><option>INR (₹)</option><option>USD ($)</option></select></Field>
@@ -107,10 +107,10 @@ function Body() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="SMTP host"><input defaultValue="smtp.sendgrid.net" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
                 <Field label="SMTP port"><input defaultValue="587" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
-                <Field label="From name"><input defaultValue="We Are Going" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
-                <Field label="From email"><input defaultValue="no-reply@wearegoing.in" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
+                <Field label="From name"><input defaultValue="WE ARE UNITED" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
+                <Field label="From email"><input defaultValue="no-reply@weareunited.in" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
                 <Field label="SMS provider"><select className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm"><option>MSG91</option><option>Twilio</option><option>Gupshup</option></select></Field>
-                <Field label="Sender ID"><input defaultValue="WAGOIN" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
+                <Field label="Sender ID"><input defaultValue="WEAREUNITED" className="w-full px-3 py-2 rounded-lg border border-warm bg-surface text-sm" /></Field>
               </div>
             </Section>
           )}

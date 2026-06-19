@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Community, MatrimonyProfile, Member, PartnerPreference
+from .models import BookingProperty, Community, MatrimonyProfile, Member, PartnerPreference, PropertyResource
 
 
 @override_settings(MATCHING_MODE='OPEN_TEST')
@@ -258,3 +258,144 @@ class MessageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data['reactions']), 0)
+
+
+class PropertyManagementWorkflowTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.community = Community.objects.create(name='Ahir Samaj', status='Approved')
+        self.other_community = Community.objects.create(name='Other Samaj', status='Approved')
+
+        self.super_user = User.objects.create_superuser(username='super', email='super@example.com', password='pass')
+        self.admin_user = User.objects.create_user(username='admin', password='pass')
+        self.member_user = User.objects.create_user(username='member', password='pass')
+        self.other_admin_user = User.objects.create_user(username='other-admin', password='pass')
+
+        self.admin_member = self._member(self.admin_user, 'Community Admin', 'community_admin', self.community)
+        self.member = self._member(self.member_user, 'Member User', 'member', self.community)
+        self.other_admin_member = self._member(self.other_admin_user, 'Other Admin', 'community_admin', self.other_community)
+
+    def _member(self, user, name, role, community):
+        return Member.objects.create(
+            user=user,
+            name=name,
+            age=30,
+            gender='Male',
+            email=f'{user.username}@example.com',
+            phone='9999999999',
+            village='Rajkot',
+            profession='Engineer',
+            education='BE',
+            community=community,
+            status='Active',
+            role=role,
+        )
+
+    def _property_payload(self, **overrides):
+        data = {
+            'name': 'Ahir Samaj Hall',
+            'property_type': 'Community Hall',
+            'description': 'Community hall for events',
+            'address': 'Main Road',
+            'city': 'Rajkot',
+            'state': 'Gujarat',
+            'country': 'India',
+            'pincode': '360001',
+            'contact_person_name': 'Manager',
+            'contact_phone': '9999999999',
+            'contact_email': 'manager@example.com',
+            'photos': ['https://example.com/cover.jpg'],
+            'amenities': ['Parking', 'Kitchen'],
+            'cancellation_allowed': True,
+            'cancellation_hours': 24,
+            'refund_percentage': '75.00',
+            'security_deposit': '5000.00',
+            'approval_required': True,
+            'manual_payment_allowed': True,
+            'terms_conditions': 'Use responsibly.',
+        }
+        data.update(overrides)
+        return data
+
+    def test_community_admin_create_defaults_pending_and_hidden_from_member(self):
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.post('/api/booking-properties/', self._property_payload(), format='json')
+
+        self.assertEqual(response.status_code, 201)
+        prop = BookingProperty.objects.get(id=response.json()['id'])
+        self.assertEqual(prop.community, self.community)
+        self.assertEqual(prop.status, 'Pending Approval')
+
+        self.client.force_authenticate(self.member_user)
+        member_response = self.client.get('/api/booking-properties/')
+        self.assertEqual(member_response.status_code, 200)
+        self.assertEqual(member_response.json(), [])
+
+    def test_super_admin_rejection_requires_reason_and_reason_is_visible_to_community_admin(self):
+        prop = BookingProperty.objects.create(community=self.community, **self._property_payload())
+
+        self.client.force_authenticate(self.super_user)
+        response = self.client.post(f'/api/booking-properties/{prop.id}/reject/', {}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(
+            f'/api/booking-properties/{prop.id}/reject/',
+            {'rejection_reason': 'Please add a valid map location.'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        prop.refresh_from_db()
+        self.assertEqual(prop.status, 'Rejected')
+        self.assertEqual(prop.rejection_reason, 'Please add a valid map location.')
+
+        self.client.force_authenticate(self.admin_user)
+        admin_response = self.client.get('/api/booking-properties/')
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertEqual(admin_response.json()[0]['rejection_reason'], 'Please add a valid map location.')
+
+    def test_approval_makes_property_visible_and_resources_are_community_scoped(self):
+        prop = BookingProperty.objects.create(community=self.community, **self._property_payload())
+        other_prop = BookingProperty.objects.create(community=self.other_community, **self._property_payload(name='Other Hall'))
+        resource = PropertyResource.objects.create(
+            property=prop,
+            name='Main Hall',
+            resource_type='Main Hall',
+            capacity=500,
+            full_day_rate='15000.00',
+            status='Active',
+        )
+        PropertyResource.objects.create(
+            property=other_prop,
+            name='Other Hall Resource',
+            resource_type='Main Hall',
+            capacity=300,
+            full_day_rate='12000.00',
+            status='Active',
+        )
+
+        self.client.force_authenticate(self.super_user)
+        response = self.client.post(f'/api/booking-properties/{prop.id}/approve/')
+        self.assertEqual(response.status_code, 200)
+
+        self.client.force_authenticate(self.member_user)
+        member_response = self.client.get('/api/booking-properties/')
+        self.assertEqual(member_response.status_code, 200)
+        self.assertEqual([item['id'] for item in member_response.json()], [prop.id])
+        self.assertEqual(member_response.json()[0]['starting_price'], 15000.0)
+
+        resources_response = self.client.get('/api/property-resources/')
+        self.assertEqual(resources_response.status_code, 200)
+        self.assertEqual([item['id'] for item in resources_response.json()], [resource.id])
+
+    def test_community_admin_cannot_create_resource_for_other_community_property(self):
+        other_prop = BookingProperty.objects.create(community=self.other_community, **self._property_payload(name='Other Hall'))
+
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.post('/api/property-resources/', {
+            'property': other_prop.id,
+            'name': 'Kitchen',
+            'resource_type': 'Kitchen',
+            'capacity': 50,
+        }, format='json')
+
+        self.assertEqual(response.status_code, 403)

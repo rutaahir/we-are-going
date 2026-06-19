@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
-import { 
-  Search, Star, Phone, MapPin, MessageCircle, Globe, Mail, 
-  Clock, ChevronLeft, ChevronRight, Filter, Building2, 
+import {
+  Search, Star, Phone, MapPin, MessageCircle, Globe, Mail,
+  Clock, ChevronLeft, ChevronRight, Filter, Building2,
   Award, Zap, CheckCircle2, X, ExternalLink, Calendar,
   Instagram, Facebook, Youtube, Linkedin
 } from "lucide-react";
@@ -13,10 +13,47 @@ import { api, getImageUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES = [
-  "Food & Bakery", "Manufacturing", "Jewellery", "Healthcare", 
-  "Textile", "Construction", "Automobile", "Professional", 
-  "Education", "Technology", "Retail", "Other"
+  "Food & Bakery", "Manufacturing", "Jewellery", "Healthcare",
+  "Textile", "Construction", "Automobile", "Professional",
+  "Education", "Technology", "Retail", "Agriculture", "Finance", "Transport", "Other"
 ];
+
+// Convert a Member with profession_type==='Business' into a unified business card object
+function memberToBusiness(m: any): any {
+  return {
+    _source: "member",
+    id: `member_${m.id}`,
+    name: m.business_name || m.name,
+    category: m.business_category || "Other",
+    owner: m.name,
+    location: `${m.village || ""}, ${m.district || ""}`.replace(/^,\s*/, ""),
+    city: m.district || m.village || "",
+    state: m.state || "Gujarat",
+    phone: m.phone || "",
+    whatsapp: m.phone || "",
+    email: m.email || "",
+    gst_no: m.gst_no || "",
+    business_years: m.business_years || "",
+    desc: m.business_category
+      ? `${m.business_category} business owned by ${m.name} from ${m.village || m.district || "Gujarat"}.`
+      : `Community member business owned by ${m.name}.`,
+    verified: m.status === "Verified" || m.status === "Active",
+    status: m.status === "Verified" || m.status === "Active" ? "VERIFIED" : "MEMBER_LISTED",
+    featured: false,
+    img: m.avatar || null,
+    img_url: m.avatar_url || null,
+    cover: null,
+    cover_url: null,
+    rating: 0,
+    views: 0,
+    opens: 0,
+    whatsapp_clicks: 0,
+    call_clicks: 0,
+    website_visits: 0,
+    member_id: m.id,
+    member_avatar: m.avatar || m.avatar_url || null,
+  };
+}
 
 const DEFAULT_HOURS = {
   Monday: "09:00 AM - 07:00 PM",
@@ -31,12 +68,14 @@ const DEFAULT_HOURS = {
 export const Route = createFileRoute("/dashboard/business")({
   component: () => {
     const { user } = useAuth();
-    
+
     // Core data state
     const [businesses, setBusinesses] = useState<any[]>([]);
+    const [memberBusinesses, setMemberBusinesses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [openBusiness, setOpenBusiness] = useState<any | null>(null);
-    
+    const [activeTab, setActiveTab] = useState<"all" | "registered" | "members">("all");
+
     // Filtering and sorting state
     const [searchQuery, setSearchQuery] = useState("");
     const [searchOwner, setSearchOwner] = useState("");
@@ -45,16 +84,19 @@ export const Route = createFileRoute("/dashboard/business")({
     const [featuredOnly, setFeaturedOnly] = useState(false);
     const [verifiedOnly, setVerifiedOnly] = useState(false);
     const [sortByRecent, setSortByRecent] = useState(false);
-    
+
     // UI state
     const [carouselIndex, setCarouselIndex] = useState(0);
     const [showFilters, setShowFilters] = useState(false);
 
+    useEffect(() => {
+      setCarouselIndex(0);
+    }, [openBusiness]);
+
     // Fetch businesses from backend
     const fetchBusinesses = async (isSilent = false) => {
       if (!isSilent) setLoading(true);
-      
-      // Fetch businesses associated with the user's community hierarchy
+
       const filters: any = {};
       if (user?.communityId) {
         try {
@@ -64,33 +106,37 @@ export const Route = createFileRoute("/dashboard/business")({
           filters.community_id = user.communityId;
         }
       }
-      
-      api.getBusinesses(filters)
-        .then((res) => {
-          // Keep the verified business visibility rule at the front-end level as a safety check
-          // Status = VERIFIED or status = PENDING (if community admin)
-          const isCommAdmin = user?.role === "community_admin" || user?.role === "super_admin";
-          const visible = (res || []).filter((b: any) => {
-            // If the business status is explicitly rejected or suspended, do not show to members
-            if (b.status === "REJECTED" || b.status === "SUSPENDED") return false;
-            if (b.status === "PENDING") {
-              return isCommAdmin; // Only visible to admin
-            }
-            // By default, verified is True or status is VERIFIED
-            return b.verified || b.status === "VERIFIED" || b.status === undefined;
-          });
-          setBusinesses(visible);
-        })
-        .catch(console.error)
-        .finally(() => {
-          if (!isSilent) setLoading(false);
+
+      try {
+        // Fetch registered Business model entries
+        const bizRes = await api.getBusinesses(filters);
+        const isCommAdmin = user?.role === "community_admin" || user?.role === "super_admin";
+        const visible = (bizRes || []).filter((b: any) => {
+          if (b.status === "REJECTED" || b.status === "SUSPENDED") return false;
+          if (b.status === "PENDING") return isCommAdmin;
+          return b.verified || b.status === "VERIFIED" || b.status === undefined;
         });
+        setBusinesses(visible);
+
+        // Fetch members who chose Business as their profession type
+        const memberFilters: any = { profession_type: "Business" };
+        if (filters.community_id) memberFilters.community_id = filters.community_id;
+        const membRes = await api.getMembers(memberFilters);
+        const bizMembers = (membRes || [])
+          .filter((m: any) => m.profession_type === "Business" && m.business_name)
+          .map(memberToBusiness);
+        setMemberBusinesses(bizMembers);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!isSilent) setLoading(false);
+      }
     };
 
     // Load initial data and set up real-time polling synchronization (every 5 seconds)
     useEffect(() => {
       fetchBusinesses(false);
-      
+
       const interval = setInterval(() => {
         fetchBusinesses(true);
       }, 5000);
@@ -124,7 +170,7 @@ export const Route = createFileRoute("/dashboard/business")({
           }
           return b;
         }));
-        
+
         // Also update openBusiness if it's currently open
         if (openBusiness && openBusiness.id === businessId) {
           setOpenBusiness((prev: any) => {
@@ -147,12 +193,24 @@ export const Route = createFileRoute("/dashboard/business")({
       handleTrackClick(b.id, "open");
     };
 
+    // Combine all sources based on active tab
+    const allEntries = (() => {
+      if (activeTab === "registered") return businesses;
+      if (activeTab === "members") return memberBusinesses;
+      // Merge: registered businesses first, then member businesses that don't duplicate
+      const regNames = new Set(businesses.map((b: any) => b.name?.toLowerCase()));
+      const uniqueMembers = memberBusinesses.filter(
+        (m: any) => !regNames.has(m.name?.toLowerCase())
+      );
+      return [...businesses, ...uniqueMembers];
+    })();
+
     // Filter businesses locally based on search values
-    const filtered = businesses.filter((b) => {
-      const matchName = b.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const filtered = allEntries.filter((b) => {
+      const matchName = (b.name || "").toLowerCase().includes(searchQuery.toLowerCase());
       const matchOwner = (b.owner || "").toLowerCase().includes(searchOwner.toLowerCase());
       const matchCat = selectedCategory === "All" || b.category === selectedCategory;
-      const matchLocation = !selectedLocation || 
+      const matchLocation = !selectedLocation ||
         (b.location || "").toLowerCase().includes(selectedLocation.toLowerCase()) ||
         (b.city || "").toLowerCase().includes(selectedLocation.toLowerCase()) ||
         (b.state || "").toLowerCase().includes(selectedLocation.toLowerCase());
@@ -166,9 +224,7 @@ export const Route = createFileRoute("/dashboard/business")({
     const sorted = [...filtered].sort((a, b) => {
       if (a.featured && !b.featured) return -1;
       if (!a.featured && b.featured) return 1;
-      if (sortByRecent) {
-        return b.id - a.id;
-      }
+      if (sortByRecent) return (b.id?.toString() > a.id?.toString() ? 1 : -1);
       return (b.rating || 0) - (a.rating || 0);
     });
 
@@ -184,10 +240,12 @@ export const Route = createFileRoute("/dashboard/business")({
     }, [featuredBusinesses]);
 
     // Statistics Calculations
-    const totalCount = businesses.length;
-    const verifiedCount = businesses.filter((b) => b.verified || b.status === "VERIFIED").length;
-    const uniqueCategories = new Set(businesses.map((b) => b.category)).size;
+    const allForStats = [...businesses, ...memberBusinesses];
+    const totalCount = allForStats.length;
+    const verifiedCount = allForStats.filter((b) => b.verified || b.status === "VERIFIED").length;
+    const uniqueCategories = new Set(allForStats.map((b) => b.category)).size;
     const featuredCount = featuredBusinesses.length;
+    const memberBizCount = memberBusinesses.length;
 
     // Default mock background images if cover/logo are missing
     const getCoverImage = (b: any) => {
@@ -203,8 +261,8 @@ export const Route = createFileRoute("/dashboard/business")({
     };
 
     return (
-      <PageWrap 
-        title="Samaj Business Hub" 
+      <PageWrap
+        title="Samaj Business Hub"
         desc="Discover, connect, and support verified businesses and entrepreneurs within our community hierarchy."
       >
         {/* Statistics Row */}
@@ -224,7 +282,7 @@ export const Route = createFileRoute("/dashboard/business")({
             </div>
             <div>
               <div className="text-2xl font-bold font-ui text-slate-800">{verifiedCount}</div>
-              <div className="text-xs text-warm-muted">Verified Members</div>
+              <div className="text-xs text-warm-muted">Verified Businesses</div>
             </div>
           </div>
           <div className="bg-surface border border-warm rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-gold/30 transition duration-300 flex items-center gap-3.5">
@@ -232,8 +290,8 @@ export const Route = createFileRoute("/dashboard/business")({
               <Zap className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-2xl font-bold font-ui text-slate-800">{featuredCount}</div>
-              <div className="text-xs text-warm-muted">Featured Partners</div>
+              <div className="text-2xl font-bold font-ui text-slate-800">{memberBizCount}</div>
+              <div className="text-xs text-warm-muted">Member Businesses</div>
             </div>
           </div>
           <div className="bg-surface border border-warm rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-gold/30 transition duration-300 flex items-center gap-3.5">
@@ -247,12 +305,31 @@ export const Route = createFileRoute("/dashboard/business")({
           </div>
         </div>
 
+        {/* Source Tabs */}
+        <div className="flex items-center gap-2 mb-5">
+          {(["all", "registered", "members"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "px-5 py-2 rounded-xl text-xs font-bold transition border",
+                activeTab === tab
+                  ? "bg-gold text-white border-gold shadow-sm"
+                  : "border-warm bg-surface text-slate-600 hover:bg-sand/30"
+              )}
+            >
+              {tab === "all" ? "All Businesses" : tab === "registered" ? "Directory Listings" : "Member Businesses"}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-warm-muted font-medium">{sorted.length} result{sorted.length !== 1 ? "s" : ""}</span>
+        </div>
+
         {/* Featured Slider Carousel */}
         {featuredBusinesses.length > 0 && (
           <div className="relative overflow-hidden rounded-3xl mb-8 bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 text-white shadow-xl min-h-[220px] sm:min-h-[260px] flex items-center">
             {/* Background Image overlay */}
             <div className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none" style={{ backgroundImage: `url(${getCoverImage(featuredBusinesses[carouselIndex])})` }} />
-            
+
             <div className="relative z-10 w-full p-6 sm:p-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
               <div className="max-w-xl space-y-3">
                 <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gold/20 border border-gold/40 text-gold text-[10px] font-bold uppercase tracking-widest">
@@ -272,13 +349,13 @@ export const Route = createFileRoute("/dashboard/business")({
               </div>
 
               <div className="flex sm:flex-col gap-3 w-full sm:w-auto">
-                <button 
+                <button
                   onClick={() => handleOpenDetails(featuredBusinesses[carouselIndex])}
                   className="flex-1 sm:flex-initial text-center px-6 py-3 bg-gold text-slate-950 hover:bg-gold/90 font-semibold rounded-xl text-sm transition shadow-lg shadow-gold/20"
                 >
                   View Details
                 </button>
-                <a 
+                <a
                   href={`https://wa.me/${featuredBusinesses[carouselIndex].whatsapp || featuredBusinesses[carouselIndex].phone}?text=Hello%20${encodeURIComponent(featuredBusinesses[carouselIndex].name)},%20I%20found%20your%20business%20on%20the%20Samaj%20Business%20Hub.`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -293,7 +370,7 @@ export const Route = createFileRoute("/dashboard/business")({
             {/* Navigation Arrows */}
             {featuredBusinesses.length > 1 && (
               <div className="absolute bottom-4 right-6 flex items-center gap-2 z-20">
-                <button 
+                <button
                   onClick={() => setCarouselIndex((prev) => (prev - 1 + featuredBusinesses.length) % featuredBusinesses.length)}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
                 >
@@ -302,7 +379,7 @@ export const Route = createFileRoute("/dashboard/business")({
                 <span className="text-xs font-semibold text-slate-400">
                   {carouselIndex + 1} / {featuredBusinesses.length}
                 </span>
-                <button 
+                <button
                   onClick={() => setCarouselIndex((prev) => (prev + 1) % featuredBusinesses.length)}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
                 >
@@ -318,15 +395,15 @@ export const Route = createFileRoute("/dashboard/business")({
           <div className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-3 w-4 h-4 text-warm-muted" />
-              <input 
+              <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search businesses by name, brand, or specialty..." 
+                placeholder="Search businesses by name, brand, or specialty..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-warm bg-sand/30 focus:outline-none focus:border-gold text-sm"
               />
             </div>
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={cn(
                   "px-4 py-2.5 rounded-xl border text-sm font-semibold flex items-center gap-2 transition",
@@ -335,7 +412,7 @@ export const Route = createFileRoute("/dashboard/business")({
               >
                 <Filter className="w-4 h-4" /> Filters
               </button>
-              <button 
+              <button
                 onClick={() => setSortByRecent(!sortByRecent)}
                 className={cn(
                   "px-4 py-2.5 rounded-xl border text-sm font-semibold transition flex-1 md:flex-initial text-center",
@@ -352,7 +429,7 @@ export const Route = createFileRoute("/dashboard/business")({
             <div className="pt-4 border-t border-warm grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1">Search Owner Name</label>
-                <input 
+                <input
                   value={searchOwner}
                   onChange={(e) => setSearchOwner(e.target.value)}
                   placeholder="Enter owner name..."
@@ -361,7 +438,7 @@ export const Route = createFileRoute("/dashboard/business")({
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1">Location / City Filter</label>
-                <input 
+                <input
                   value={selectedLocation}
                   onChange={(e) => setSelectedLocation(e.target.value)}
                   placeholder="Gujarat, Surat, Ahmedabad..."
@@ -370,8 +447,8 @@ export const Route = createFileRoute("/dashboard/business")({
               </div>
               <div className="flex flex-col justify-center space-y-2 pt-2 md:pt-4">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={featuredOnly}
                     onChange={(e) => setFeaturedOnly(e.target.checked)}
                     className="rounded text-gold focus:ring-gold"
@@ -379,8 +456,8 @@ export const Route = createFileRoute("/dashboard/business")({
                   Featured Partner Showcase
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={verifiedOnly}
                     onChange={(e) => setVerifiedOnly(e.target.checked)}
                     className="rounded text-gold focus:ring-gold"
@@ -393,25 +470,25 @@ export const Route = createFileRoute("/dashboard/business")({
 
           {/* Horizontal Category Select Pills */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-warm scrollbar-track-transparent">
-            <button 
+            <button
               onClick={() => setSelectedCategory("All")}
               className={cn(
                 "px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition",
-                selectedCategory === "All" 
-                  ? "bg-gold text-white shadow-sm" 
+                selectedCategory === "All"
+                  ? "bg-gold text-white shadow-sm"
                   : "bg-sand/30 border border-warm text-slate-700 hover:bg-sand/60"
               )}
             >
               All Sectors
             </button>
             {CATEGORIES.map((c) => (
-              <button 
-                key={c} 
+              <button
+                key={c}
                 onClick={() => setSelectedCategory(c)}
                 className={cn(
                   "px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition",
-                  selectedCategory === c 
-                    ? "bg-gold text-white shadow-sm" 
+                  selectedCategory === c
+                    ? "bg-gold text-white shadow-sm"
                     : "bg-sand/30 border border-warm text-slate-700 hover:bg-sand/60"
                 )}
               >
@@ -451,7 +528,7 @@ export const Route = createFileRoute("/dashboard/business")({
                 Verified community businesses and directory listings will appear here. Refine your search filters to find others.
               </p>
             </div>
-            <button 
+            <button
               onClick={() => {
                 setSearchQuery("");
                 setSearchOwner("");
@@ -459,7 +536,7 @@ export const Route = createFileRoute("/dashboard/business")({
                 setSelectedLocation("");
                 setFeaturedOnly(false);
                 setVerifiedOnly(false);
-              }} 
+              }}
               className="px-6 py-2.5 rounded-xl bg-gold text-white font-semibold text-xs shadow hover:bg-gold/90 transition"
             >
               Explore Later
@@ -474,14 +551,14 @@ export const Route = createFileRoute("/dashboard/business")({
                 <AnimatedCard key={b.id} className="group overflow-hidden flex flex-col border border-warm bg-surface shadow-sm hover:shadow-lg transition-all duration-300">
                   {/* Card Header (Cover Image & Badges) */}
                   <div className="relative h-40 w-full overflow-hidden bg-sand">
-                    <img 
-                      src={getCoverImage(b)} 
-                      alt={b.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                      loading="lazy" 
+                    <img
+                      src={getCoverImage(b)}
+                      alt={b.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent pointer-events-none" />
-                    
+
                     {/* Floating Badges */}
                     <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
                       <span className="text-[9px] uppercase tracking-wider bg-slate-950/70 text-gold px-2.5 py-0.5 rounded-full font-bold border border-gold/30">
@@ -509,6 +586,8 @@ export const Route = createFileRoute("/dashboard/business")({
                         <div className="w-12 h-12 rounded-xl bg-white border border-warm overflow-hidden -mt-10 relative z-10 flex items-center justify-center shadow-md">
                           {hasLogo ? (
                             <img src={getLogoImage(b)!} alt="" className="w-full h-full object-cover" />
+                          ) : b.member_avatar ? (
+                            <img src={b.member_avatar} alt="" className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full bg-gold text-slate-950 flex items-center justify-center font-bold text-sm">
                               {b.name?.[0]?.toUpperCase() || "B"}
@@ -520,7 +599,10 @@ export const Route = createFileRoute("/dashboard/business")({
                           <h3 className="font-ui font-bold text-slate-800 line-clamp-1 group-hover:text-gold transition-colors duration-200">
                             {b.name}
                           </h3>
-                          <div className="text-[10px] text-warm-muted">
+                          <div className="text-[10px] text-warm-muted flex items-center gap-1">
+                            {b._source === "member" && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[9px] font-bold border border-blue-100 mr-1">Member</span>
+                            )}
                             Owner: <span className="font-semibold text-slate-700">{b.owner || "Samaj Entrepreneur"}</span>
                           </div>
                         </div>
@@ -532,7 +614,7 @@ export const Route = createFileRoute("/dashboard/business")({
 
                       <div className="flex flex-col gap-1 text-[11px] text-slate-600 pt-2">
                         <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-gold" /> 
+                          <MapPin className="w-3.5 h-3.5 text-gold" />
                           <span className="truncate">{b.location || `${b.city || ""}, ${b.state || ""}`}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -544,7 +626,7 @@ export const Route = createFileRoute("/dashboard/business")({
 
                     {/* Action Buttons */}
                     <div className="flex gap-2 pt-4 mt-auto border-t border-warm/60">
-                      <a 
+                      <a
                         href={`https://wa.me/${b.whatsapp || b.phone}?text=Hello%20${encodeURIComponent(b.name)},%20I%20found%20your%20business%20on%20the%20Samaj%20Business%20Hub.`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -553,14 +635,14 @@ export const Route = createFileRoute("/dashboard/business")({
                       >
                         <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
                       </a>
-                      <a 
+                      <a
                         href={`tel:${b.phone}`}
                         onClick={() => handleTrackClick(b.id, "call")}
                         className="py-2 px-3 rounded-xl border border-warm hover:bg-sand/30 text-slate-600 font-semibold text-[11px] flex items-center justify-center transition"
                       >
                         <Phone className="w-3.5 h-3.5" />
                       </a>
-                      <button 
+                      <button
                         onClick={() => handleOpenDetails(b)}
                         className="flex-1 py-2 bg-gold hover:bg-gold/90 text-white font-semibold rounded-xl text-[11px] transition shadow-sm"
                       >
@@ -575,23 +657,23 @@ export const Route = createFileRoute("/dashboard/business")({
         )}
 
         {/* Detailed Business Drawer View */}
-        <DetailDrawer 
-          open={!!openBusiness} 
-          onClose={() => setOpenBusiness(null)} 
+        <DetailDrawer
+          open={!!openBusiness}
+          onClose={() => setOpenBusiness(null)}
           title={openBusiness?.name || "Business Directory Details"}
         >
           {openBusiness && (() => {
             const hasLogo = getLogoImage(openBusiness) !== null;
             // Hours parsing
-            const hoursData = openBusiness.hours && typeof openBusiness.hours === "object" 
-              ? { ...DEFAULT_HOURS, ...openBusiness.hours } 
+            const hoursData = openBusiness.hours && typeof openBusiness.hours === "object"
+              ? { ...DEFAULT_HOURS, ...openBusiness.hours }
               : DEFAULT_HOURS;
-            
+
             // Socials parsing
             const socialsData = openBusiness.socials && typeof openBusiness.socials === "object"
               ? openBusiness.socials
               : {};
-              
+
             // Gallery decoding
             const galleryList: string[] = [];
             if (openBusiness.gallery) {
@@ -601,7 +683,7 @@ export const Route = createFileRoute("/dashboard/business")({
                 try {
                   const parsed = JSON.parse(openBusiness.gallery);
                   if (Array.isArray(parsed)) galleryList.push(...parsed);
-                } catch (_) {}
+                } catch (_) { }
               }
             }
 
@@ -611,7 +693,7 @@ export const Route = createFileRoute("/dashboard/business")({
                 <div className="relative h-48 rounded-2xl overflow-hidden bg-sand border border-warm shadow-inner">
                   <img src={getCoverImage(openBusiness)} alt="" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
-                  
+
                   {/* Floating Tags */}
                   <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
                     <span className="text-[10px] uppercase font-bold tracking-widest bg-gold text-slate-950 px-3 py-1 rounded-full border border-gold/40">
@@ -660,7 +742,7 @@ export const Route = createFileRoute("/dashboard/business")({
 
                 {/* Quick Interactive Actions */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <a 
+                  <a
                     href={`tel:${openBusiness.phone}`}
                     onClick={() => handleTrackClick(openBusiness.id, "call")}
                     className="flex flex-col items-center justify-center p-3 rounded-xl border border-warm bg-surface hover:bg-sand/30 transition text-slate-700 space-y-1 text-center"
@@ -668,7 +750,7 @@ export const Route = createFileRoute("/dashboard/business")({
                     <Phone className="w-5 h-5 text-gold" />
                     <span className="text-[10px] font-bold">Call Now</span>
                   </a>
-                  <a 
+                  <a
                     href={`https://wa.me/${openBusiness.whatsapp || openBusiness.phone}?text=Hello%20${encodeURIComponent(openBusiness.name)},%20I%20found%20your%20business%20on%20the%20Samaj%20Business%20Hub.`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -679,7 +761,7 @@ export const Route = createFileRoute("/dashboard/business")({
                     <span className="text-[10px] font-bold">WhatsApp</span>
                   </a>
                   {openBusiness.email && (
-                    <a 
+                    <a
                       href={`mailto:${openBusiness.email}`}
                       onClick={() => handleTrackClick(openBusiness.id, "email")}
                       className="flex flex-col items-center justify-center p-3 rounded-xl border border-warm bg-surface hover:bg-sand/30 transition text-slate-700 space-y-1 text-center"
@@ -689,7 +771,7 @@ export const Route = createFileRoute("/dashboard/business")({
                     </a>
                   )}
                   {openBusiness.website && (
-                    <a 
+                    <a
                       href={openBusiness.website}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -720,7 +802,7 @@ export const Route = createFileRoute("/dashboard/business")({
                       </div>
                     </div>
                     <div className="pt-2 border-t border-warm">
-                      <a 
+                      <a
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${openBusiness.name} ${openBusiness.address || ""} ${openBusiness.city || ""}`)}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -734,15 +816,64 @@ export const Route = createFileRoute("/dashboard/business")({
 
                 {/* Image Gallery carousel */}
                 {galleryList.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <h4 className="text-xs uppercase font-bold tracking-wider text-slate-500">Business Gallery</h4>
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-warm scrollbar-track-transparent">
-                      {galleryList.map((g, idx) => (
-                        <div key={idx} className="w-36 h-24 rounded-xl overflow-hidden border border-warm bg-sand shrink-0">
-                          <img src={getImageUrl(g)} alt="" className="w-full h-full object-cover" />
-                        </div>
-                      ))}
+                    
+                    {/* Active/Large Image Display */}
+                    <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-warm bg-sand shadow-sm group">
+                      <img
+                        src={getImageUrl(galleryList[carouselIndex] || galleryList[0])}
+                        alt=""
+                        className="w-full h-full object-cover transition-all duration-300"
+                      />
+                      
+                      {/* Left & Right arrow controls */}
+                      {galleryList.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setCarouselIndex(prev => (prev === 0 ? galleryList.length - 1 : prev - 1))}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-800 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity active:scale-95 z-20"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCarouselIndex(prev => (prev === galleryList.length - 1 ? 0 : prev + 1))}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-800 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity active:scale-95 z-20"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      
+                      {/* Image index badge */}
+                      <div className="absolute bottom-3 right-3 px-2 py-1 rounded bg-black/60 text-white text-[10px] font-bold z-20">
+                        {(carouselIndex % galleryList.length) + 1} / {galleryList.length}
+                      </div>
                     </div>
+
+                    {/* Horizontal Thumbnails Row */}
+                    {galleryList.length > 1 && (
+                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-warm scrollbar-track-transparent">
+                        {galleryList.map((g, idx) => {
+                          const isActive = (carouselIndex % galleryList.length) === idx;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setCarouselIndex(idx)}
+                              className={cn(
+                                "w-20 h-14 rounded-lg overflow-hidden border shrink-0 transition-all",
+                                isActive ? "border-gold ring-2 ring-gold/20 scale-95" : "border-warm opacity-70 hover:opacity-100"
+                              )}
+                            >
+                              <img src={getImageUrl(g)} alt="" className="w-full h-full object-cover" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -770,7 +901,7 @@ export const Route = createFileRoute("/dashboard/business")({
                     <h4 className="text-xs uppercase font-bold tracking-wider text-slate-500">Social Connections</h4>
                     <div className="flex flex-wrap gap-2.5">
                       {socialsData.instagram && (
-                        <a 
+                        <a
                           href={`https://instagram.com/${socialsData.instagram}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -780,7 +911,7 @@ export const Route = createFileRoute("/dashboard/business")({
                         </a>
                       )}
                       {socialsData.facebook && (
-                        <a 
+                        <a
                           href={`https://facebook.com/${socialsData.facebook}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -790,7 +921,7 @@ export const Route = createFileRoute("/dashboard/business")({
                         </a>
                       )}
                       {socialsData.youtube && (
-                        <a 
+                        <a
                           href={`https://youtube.com/${socialsData.youtube}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -800,7 +931,7 @@ export const Route = createFileRoute("/dashboard/business")({
                         </a>
                       )}
                       {socialsData.linkedin && (
-                        <a 
+                        <a
                           href={`https://linkedin.com/in/${socialsData.linkedin}`}
                           target="_blank"
                           rel="noopener noreferrer"

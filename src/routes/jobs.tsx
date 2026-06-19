@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+﻿import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/jobs")({
   beforeLoad: () => {
@@ -7,6 +7,6 @@ export const Route = createFileRoute("/jobs")({
       search: { page: "jobs" },
     });
   },
-  head: () => ({ meta: [{ title: "Job Portal — We Are Going" }] }),
+  head: () => ({ meta: [{ title: "Job Portal — WE ARE UNITED" }] }),
   component: () => null,
 });

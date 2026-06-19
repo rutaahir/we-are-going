@@ -53,6 +53,17 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
       const err = new Error(errorMessage) as any;
       err.status = response.status;
       err.errorFields = errorFields;
+      
+      // Auto-logout on invalid token or deleted user
+      if (response.status === 401 && (errorMessage.includes("User not found") || errorMessage.includes("token not valid"))) {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("wag_user");
+          localStorage.removeItem("wag_token");
+          localStorage.removeItem("wag_refresh");
+          window.location.href = "/login";
+        }
+      }
+      
       throw err;
     }
 
@@ -1334,6 +1345,153 @@ export const api = {
     return await apiFetch<any>(`/messages/${messageId}/`, {
       method: "DELETE"
     });
+  },
+
+  // --- VENUE BOOKING & PROPERTY MANAGEMENT ---
+  async getBookingProperties(communityId?: string | number): Promise<any[]> {
+    const q = communityId ? `?community=${communityId}` : "";
+    return await apiFetch<any[]>(`/booking-properties/${q}`);
+  },
+  async createBookingProperty(data: any): Promise<any> {
+    let body: any = JSON.stringify(data);
+    if (data instanceof FormData) body = data;
+    else if (Object.values(data).some(val => val instanceof File || val instanceof Blob || (Array.isArray(val) && val.some(v => v instanceof File || v instanceof Blob)))) {
+      const formData = new FormData();
+      for (const [key, val] of Object.entries(data)) {
+        if (val === null) formData.append(key, "");
+        else if (Array.isArray(val)) {
+          if (val.some(v => v instanceof File || v instanceof Blob)) {
+            val.forEach(v => formData.append(key, v as any));
+          } else {
+            formData.append(key, JSON.stringify(val));
+          }
+        }
+        else if (val !== undefined) formData.append(key, val as any);
+      }
+      body = formData;
+    }
+    return await apiFetch<any>('/booking-properties/', { method: 'POST', body });
+  },
+  async updateBookingProperty(id: number | string, data: any): Promise<any> {
+    let body: any = JSON.stringify(data);
+    if (data instanceof FormData) body = data;
+    else if (Object.values(data).some(val => val instanceof File || val instanceof Blob || (Array.isArray(val) && val.some(v => v instanceof File || v instanceof Blob)))) {
+      const formData = new FormData();
+      for (const [key, val] of Object.entries(data)) {
+        if (val === null) formData.append(key, "");
+        else if (Array.isArray(val)) {
+          if (val.some(v => v instanceof File || v instanceof Blob)) {
+            val.forEach(v => formData.append(key, v as any));
+          } else {
+            formData.append(key, JSON.stringify(val));
+          }
+        }
+        else if (val !== undefined) formData.append(key, val as any);
+      }
+      body = formData;
+    }
+    return await apiFetch<any>(`/booking-properties/${id}/`, { method: 'PATCH', body });
+  },
+  async getPropertyResources(): Promise<any[]> {
+    return await apiFetch<any[]>('/property-resources/');
+  },
+  async createPropertyResource(data: any): Promise<any> {
+    return await apiFetch<any>('/property-resources/', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updatePropertyResource(id: number | string, data: any): Promise<any> {
+    return await apiFetch<any>(`/property-resources/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async getResourcePricing(): Promise<any[]> {
+    return await apiFetch<any[]>('/resource-pricing/');
+  },
+  async createResourcePricing(data: any): Promise<any> {
+    return await apiFetch<any>('/resource-pricing/', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateResourcePricing(id: number | string, data: any): Promise<any> {
+    return await apiFetch<any>(`/resource-pricing/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async getVenueBookings(): Promise<any[]> {
+    return await apiFetch<any[]>('/venue-bookings/');
+  },
+  async createVenueBooking(data: any): Promise<any> {
+    const isFormData = data instanceof FormData;
+    return await apiFetch<any>('/venue-bookings/', { 
+      method: 'POST', 
+      body: isFormData ? data : JSON.stringify(data) 
+    });
+  },
+  async updateVenueBooking(id: number | string, data: any): Promise<any> {
+    const isFormData = data instanceof FormData;
+    return await apiFetch<any>(`/venue-bookings/${id}/`, { 
+      method: 'PATCH', 
+      body: isFormData ? data : JSON.stringify(data) 
+    });
+  },
+  async verifyVenuePayment(bookingId: number | string): Promise<any> {
+    return await apiFetch<any>(`/venue-bookings/${bookingId}/verify_payment/`, { method: 'POST' });
+  },
+  async checkInVenueBooking(bookingId: number | string): Promise<any> {
+    return await apiFetch<any>(`/venue-bookings/${bookingId}/check_in/`, { method: 'POST' });
+  },
+  async completeVenueBooking(bookingId: number | string): Promise<any> {
+    return await apiFetch<any>(`/venue-bookings/${bookingId}/complete/`, { method: 'POST' });
+  },
+  async getBookingInspections(): Promise<any[]> {
+    return await apiFetch<any[]>('/booking-inspections/');
+  },
+  async createBookingInspection(data: any): Promise<any> {
+    return await apiFetch<any>('/booking-inspections/', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateBookingInspection(id: number | string, data: any): Promise<any> {
+    return await apiFetch<any>(`/booking-inspections/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async getBookingWaitingList(): Promise<any[]> {
+    return await apiFetch<any[]>('/booking-waiting-list/');
+  },
+  async createBookingWaitingList(data: any): Promise<any> {
+    return await apiFetch<any>('/booking-waiting-list/', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateBookingWaitingList(id: number | string, data: any): Promise<any> {
+    return await apiFetch<any>(`/booking-waiting-list/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async deleteBookingWaitingList(id: number | string): Promise<any> {
+    return await apiFetch<any>(`/booking-waiting-list/${id}/`, { method: 'DELETE' });
+  },
+  async checkPropertyAvailability(propertyId: number | string, data: any): Promise<any> {
+    return await apiFetch<any>(`/booking-properties/${propertyId}/check_availability/`, { method: 'POST', body: JSON.stringify(data) });
+  },
+  async lockPropertyResource(data: any): Promise<any> {
+    return await apiFetch<any>('/resource-locks/', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async cancelVenueBooking(bookingId: number | string, data: any): Promise<any> {
+    return await apiFetch<any>(`/venue-bookings/${bookingId}/request_cancellation/`, { method: 'POST', body: JSON.stringify(data) });
+  },
+  async approveBookingProperty(propertyId: number | string): Promise<any> {
+    return await apiFetch<any>(`/booking-properties/${propertyId}/approve/`, { method: 'POST' });
+  },
+  async rejectBookingProperty(propertyId: number | string, data: any): Promise<any> {
+    return await apiFetch<any>(`/booking-properties/${propertyId}/reject/`, { method: 'POST', body: JSON.stringify(data) });
+  },
+  async notifyBookingProperty(propertyId: number | string): Promise<any> {
+    return await apiFetch<any>(`/booking-properties/${propertyId}/notify/`, { method: 'POST' });
+  },
+  async deleteBookingProperty(propertyId: number | string): Promise<any> {
+    return await apiFetch<any>(`/booking-properties/${propertyId}/`, { method: 'DELETE' });
+  },
+  async deletePropertyResource(id: number | string): Promise<any> {
+    return await apiFetch<any>(`/property-resources/${id}/`, { method: 'DELETE' });
+  },
+  async bulkCreatePropertyResources(data: any): Promise<any> {
+    return await apiFetch<any>('/property-resources/bulk_create/', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async createResourceDependency(data: any): Promise<any> {
+    return await apiFetch<any>('/resource-dependencies/', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async getResourceDependencies(): Promise<any> {
+    return await apiFetch<any>('/resource-dependencies/');
+  },
+  async deleteResourceDependency(id: number | string): Promise<any> {
+    return await apiFetch<any>(`/resource-dependencies/${id}/`, { method: 'DELETE' });
   }
 };
 

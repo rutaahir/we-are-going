@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+﻿import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/directory")({
   beforeLoad: () => {
@@ -7,6 +7,6 @@ export const Route = createFileRoute("/directory")({
       search: { page: "directory" },
     });
   },
-  head: () => ({ meta: [{ title: "Member Directory — We Are Going" }] }),
+  head: () => ({ meta: [{ title: "Member Directory — WE ARE UNITED" }] }),
   component: () => null,
 });

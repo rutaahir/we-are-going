@@ -34,15 +34,15 @@ MASTER_HTML_LAYOUT = """<!DOCTYPE html>
 <body>
   <div class="email-container">
     <div class="email-header">
-      <h1>We Are Going</h1>
+      <h1>WE ARE UNITED</h1>
     </div>
     <div class="email-body">
       {{ body_content|safe }}
     </div>
     <div class="email-footer">
       <p>This email was sent to {{ recipient }}.</p>
-      <p>&copy; 2026 We Are Going. All rights reserved.</p>
-      <p>Support: <a href="mailto:support@wearegoing.in" style="color: #1B4FD8; text-decoration: none; font-weight: 500;">support@wearegoing.in</a></p>
+      <p>&copy; 2026 WE ARE UNITED. All rights reserved.</p>
+      <p>Support: <a href="mailto:support@weareunited.in" style="color: #1B4FD8; text-decoration: none; font-weight: 500;">support@weareunited.in</a></p>
     </div>
   </div>
 </body>
@@ -148,14 +148,14 @@ DEFAULT_TEMPLATES = {
 </div>"""
     },
     'first_successful_login': {
-        'subject': 'Welcome to We Are Going',
-        'html_content': """<p>Welcome to We Are Going!</p>
+        'subject': 'Welcome to WE ARE UNITED',
+        'html_content': """<p>Welcome to WE ARE UNITED!</p>
 <p>You have successfully logged in to your dashboard for the first time.</p>
 <div class="highlight-box">
   <table>
     <tr><td class="label">Community Name:</td><td class="value">{{ community_name }}</td></tr>
     <tr><td class="label">Dashboard Link:</td><td class="value"><a href="http://localhost:8080/dashboard">Go to Dashboard</a></td></tr>
-    <tr><td class="label">Support Contact:</td><td class="value">support@wearegoing.in</td></tr>
+    <tr><td class="label">Support Contact:</td><td class="value">support@weareunited.in</td></tr>
   </table>
 </div>"""
     },
@@ -254,7 +254,7 @@ DEFAULT_TEMPLATES = {
     'password_changed_successfully': {
         'subject': 'Password Changed Successfully',
         'html_content': """<p>Hello,</p>
-<p>The password for your We Are Going account was changed successfully.</p>
+<p>The password for your WE ARE UNITED account was changed successfully.</p>
 <p>If you did not make this change, please contact support immediately.</p>"""
     },
     'account_suspended': {

@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
-Django Backend Startup Script for We Are Going Home
+Django Backend Startup Script for WE ARE UNITED
 Starts the Django development server on port 8000
 """
 
@@ -26,7 +26,7 @@ python_exe = venv_python if os.path.exists(venv_python) else sys.executable
 
 # Run the Django development server
 print("=" * 60)
-print("We Are Going Home - Django Backend Server")
+print("WE ARE UNITED - Django Backend Server")
 print("=" * 60)
 print(f"Working directory: {os.getcwd()}")
 print(f"Python executable: {python_exe}")

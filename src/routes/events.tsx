@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+﻿import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/events")({
   beforeLoad: () => {
@@ -7,6 +7,6 @@ export const Route = createFileRoute("/events")({
       search: { page: "events" },
     });
   },
-  head: () => ({ meta: [{ title: "Events — We Are Going" }] }),
+  head: () => ({ meta: [{ title: "Events — WE ARE UNITED" }] }),
   component: () => null,
 });

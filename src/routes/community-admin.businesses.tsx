@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
-import { 
-  Plus, Trash2, Loader2, X, Check, Edit, Star, 
-  Upload, Image as ImageIcon, MapPin, Phone, MessageCircle, 
+import {
+  Plus, Trash2, Loader2, X, Check, Edit, Star,
+  Upload, Image as ImageIcon, MapPin, Phone, MessageCircle,
   Globe, Mail, Calendar, Clock, Eye, AlertCircle
 } from "lucide-react";
 import { PageWrap } from "@/components/wag/PageWrap";
@@ -12,8 +12,8 @@ import { useAuth } from "@/context/AuthContext";
 import { api, getImageUrl } from "@/lib/api";
 
 const CATEGORIES = [
-  "Food & Bakery", "Manufacturing", "Jewellery", "Healthcare", 
-  "Textile", "Construction", "Automobile", "Professional", 
+  "Food & Bakery", "Manufacturing", "Jewellery", "Healthcare",
+  "Textile", "Construction", "Automobile", "Professional",
   "Education", "Technology", "Retail", "Other"
 ];
 
@@ -60,12 +60,14 @@ export const Route = createFileRoute("/community-admin/businesses")({
     const [editTarget, setEditTarget] = useState<any | null>(null);
     const [form, setForm] = useState<any>(blankForm());
     const [saving, setSaving] = useState(false);
-    
+
     // File upload state
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [coverFile, setCoverFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
+    const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
 
     // Form tab navigation
     const [activeTab, setActiveTab] = useState<"basic" | "contact" | "schedule">("basic");
@@ -77,6 +79,7 @@ export const Route = createFileRoute("/community-admin/businesses")({
 
     const logoInputRef = useRef<HTMLInputElement>(null);
     const coverInputRef = useRef<HTMLInputElement>(null);
+    const galleryInputRef = useRef<HTMLInputElement>(null);
 
     const fetchBusinesses = () => {
       if (!user) return;
@@ -94,15 +97,17 @@ export const Route = createFileRoute("/community-admin/businesses")({
 
     useEffect(() => { fetchBusinesses(); }, [user]);
 
-    const openCreate = () => { 
-      setForm(blankForm()); 
-      setEditTarget(null); 
+    const openCreate = () => {
+      setForm(blankForm());
+      setEditTarget(null);
       setLogoFile(null);
       setCoverFile(null);
       setLogoPreview(null);
       setCoverPreview(null);
+      setGalleryFiles([]);
+      setGalleryPreviews([]);
       setActiveTab("basic");
-      setOpen(true); 
+      setOpen(true);
     };
 
     const openEdit = (b: any) => {
@@ -130,6 +135,8 @@ export const Route = createFileRoute("/community-admin/businesses")({
       setCoverFile(null);
       setLogoPreview(b.img || b.img_url || null);
       setCoverPreview(b.cover || b.cover_url || null);
+      setGalleryFiles([]);
+      setGalleryPreviews([]);
       setActiveTab("basic");
       setOpen(true);
     };
@@ -150,21 +157,41 @@ export const Route = createFileRoute("/community-admin/businesses")({
       }
     };
 
+    const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      const newFiles = [...galleryFiles, ...files];
+      setGalleryFiles(newFiles);
+      setGalleryPreviews(newFiles.map(f => URL.createObjectURL(f)));
+    };
+
+    const removeNewGalleryPhoto = (index: number) => {
+      const newFiles = galleryFiles.filter((_, i) => i !== index);
+      setGalleryFiles(newFiles);
+      setGalleryPreviews(newFiles.map(f => URL.createObjectURL(f)));
+    };
+
+    const removeExistingGalleryPhoto = (index: number) => {
+      setForm((prev: any) => ({
+        ...prev,
+        gallery: prev.gallery.filter((_: any, i: number) => i !== index)
+      }));
+    };
+
     const handleSave = async () => {
       if (!form.name.trim()) return alert("Business name is required.");
       if (!form.owner.trim()) return alert("Owner name is required.");
-      
+
       setSaving(true);
       try {
         const fd = new FormData();
         fd.append("name", form.name);
         fd.append("category", form.category);
         fd.append("owner", form.owner);
-        
+
         // Auto sync location with city, state if location is empty
         const loc = form.location || (form.city && form.state ? `${form.city}, ${form.state}` : form.city || form.state || "");
         fd.append("location", loc);
-        
+
         fd.append("phone", form.phone);
         fd.append("desc", form.desc);
         fd.append("address", form.address);
@@ -176,13 +203,17 @@ export const Route = createFileRoute("/community-admin/businesses")({
         fd.append("status", form.status);
         fd.append("featured", String(form.featured));
         fd.append("community", user?.communityId || "");
-        
+
         fd.append("hours", JSON.stringify(form.hours));
         fd.append("socials", JSON.stringify(form.socials));
         fd.append("gallery", JSON.stringify(form.gallery));
 
         if (logoFile) fd.append("img", logoFile);
         if (coverFile) fd.append("cover", coverFile);
+
+        galleryFiles.forEach((file, idx) => {
+          fd.append(`business_gallery_${idx}`, file);
+        });
 
         if (editTarget) {
           await api.updateBusiness(editTarget.id, fd);
@@ -191,20 +222,20 @@ export const Route = createFileRoute("/community-admin/businesses")({
         }
         setOpen(false);
         fetchBusinesses();
-      } catch (e: any) { 
-        alert(e.message || "Failed to save."); 
-      } finally { 
-        setSaving(false); 
+      } catch (e: any) {
+        alert(e.message || "Failed to save.");
+      } finally {
+        setSaving(false);
       }
     };
 
     const handleDelete = async (id: number) => {
       if (!confirm("Delete this business permanently from directory?")) return;
-      try { 
-        await api.deleteBusiness(id); 
-        fetchBusinesses(); 
-      } catch (e: any) { 
-        alert(e.message || "Failed to delete."); 
+      try {
+        await api.deleteBusiness(id);
+        fetchBusinesses();
+      } catch (e: any) {
+        alert(e.message || "Failed to delete.");
       }
     };
 
@@ -222,8 +253,8 @@ export const Route = createFileRoute("/community-admin/businesses")({
     const filtered = businesses.filter(b => {
       const matchCat = filterCat === "All" || b.category === filterCat;
       const matchStatus = filterStatus === "All" || (b.status || (b.verified ? "VERIFIED" : "PENDING")) === filterStatus;
-      const matchSearch = 
-        (b.name || "").toLowerCase().includes(search.toLowerCase()) || 
+      const matchSearch =
+        (b.name || "").toLowerCase().includes(search.toLowerCase()) ||
         (b.owner || "").toLowerCase().includes(search.toLowerCase()) ||
         (b.city || "").toLowerCase().includes(search.toLowerCase()) ||
         (b.state || "").toLowerCase().includes(search.toLowerCase());
@@ -369,8 +400,8 @@ export const Route = createFileRoute("/community-admin/businesses")({
                         <td className="p-3.5">
                           <div className="flex items-center gap-1.5">
                             {hasPermission(user, ["Edit Businesses"]) && currentStatus === "PENDING" && (
-                              <button 
-                                onClick={() => handleApprove(b.id)} 
+                              <button
+                                onClick={() => handleApprove(b.id)}
                                 className="p-2 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition"
                                 title="Approve & Verify"
                               >
@@ -407,9 +438,9 @@ export const Route = createFileRoute("/community-admin/businesses")({
         )}
 
         {/* Modal Editor Form */}
-        <Modal 
-          open={open} 
-          onClose={() => setOpen(false)} 
+        <Modal
+          open={open}
+          onClose={() => setOpen(false)}
           title={editTarget ? `Modify: ${editTarget.name}` : "Create Business Directory Listing"}
           className="max-w-2xl"
         >
@@ -438,7 +469,7 @@ export const Route = createFileRoute("/community-admin/businesses")({
                   {/* Logo area */}
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-600 block">Business Logo</label>
-                    <div 
+                    <div
                       onClick={() => logoInputRef.current?.click()}
                       className="border-2 border-dashed border-warm rounded-2xl p-4 text-center cursor-pointer hover:bg-sand/30 transition flex flex-col items-center justify-center min-h-[110px]"
                     >
@@ -457,7 +488,7 @@ export const Route = createFileRoute("/community-admin/businesses")({
                   {/* Cover Area */}
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-600 block">Cover Banner Image</label>
-                    <div 
+                    <div
                       onClick={() => coverInputRef.current?.click()}
                       className="border-2 border-dashed border-warm rounded-2xl p-4 text-center cursor-pointer hover:bg-sand/30 transition flex flex-col items-center justify-center min-h-[110px]"
                     >
@@ -511,6 +542,58 @@ export const Route = createFileRoute("/community-admin/businesses")({
                     <span className="text-[10px] text-warm-muted">Promote to slide showcase carousel on directory home.</span>
                   </div>
                   <input type="checkbox" checked={form.featured} onChange={field("featured")} className="rounded text-gold focus:ring-gold w-5 h-5" />
+                </div>
+
+                {/* Business Photos (Gallery) */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-600 block">Business Photos (Gallery)</label>
+                  
+                  {/* Click/Drag to upload area */}
+                  <div
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="border-2 border-dashed border-warm rounded-2xl p-6 text-center cursor-pointer hover:bg-sand/30 transition flex flex-col items-center justify-center min-h-[110px] group"
+                  >
+                    <Upload className="w-6 h-6 text-warm-muted mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-sm font-bold text-slate-700">Upload Gallery Photos</span>
+                    <span className="text-[10px] text-warm-muted mt-1">Select multiple PNG, JPG images</span>
+                    <input ref={galleryInputRef} type="file" multiple accept="image/*" onChange={handleGalleryChange} className="hidden" />
+                  </div>
+
+                  {/* Existing gallery images from database */}
+                  {form.gallery && form.gallery.length > 0 && (
+                    <div className="space-y-1.5 mt-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Existing Gallery Photos</span>
+                      <div className="grid grid-cols-5 gap-2">
+                        {form.gallery.map((url: string, idx: number) => (
+                          <div key={`existing-${idx}`} className="relative aspect-video rounded-xl overflow-hidden border border-warm bg-orange-50 group">
+                            <img src={getImageUrl(url)} alt="" className="w-full h-full object-cover" />
+                            <button type="button" onClick={() => removeExistingGalleryPhoto(idx)}
+                              className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white rounded-xl">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Newly selected images preview */}
+                  {galleryPreviews.length > 0 && (
+                    <div className="space-y-1.5 mt-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Newly Selected Photos</span>
+                      <div className="grid grid-cols-5 gap-2">
+                        {galleryPreviews.map((src, idx) => (
+                          <div key={`new-${idx}`} className="relative aspect-video rounded-xl overflow-hidden border border-warm bg-orange-50 group">
+                            <img src={src} alt="" className="w-full h-full object-cover" />
+                            <button type="button" onClick={() => removeNewGalleryPhoto(idx)}
+                              className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white rounded-xl">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -595,10 +678,10 @@ export const Route = createFileRoute("/community-admin/businesses")({
                     {Object.keys(DEFAULT_HOURS).map(day => (
                       <div key={day} className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-slate-600 w-20">{day}</span>
-                        <input 
-                          value={form.hours[day]} 
+                        <input
+                          value={form.hours[day]}
                           onChange={e => setSubFieldValue("hours", day, e.target.value)}
-                          placeholder="e.g. 09:00 AM - 07:00 PM or Closed" 
+                          placeholder="e.g. 09:00 AM - 07:00 PM or Closed"
                           className="flex-1 px-3 py-1.5 rounded-lg border border-warm bg-surface text-xs"
                         />
                       </div>

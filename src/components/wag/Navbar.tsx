@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -31,7 +31,7 @@ export function Logo() {
         <path d="M14 19 L18 23 L26 14" fill="none" stroke="oklch(0.96 0.05 85)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <div className="leading-tight">
-        <div className="font-ui font-bold text-base">We Are Going</div>
+        <div className="font-ui font-bold text-base">WE ARE UNITED</div>
         <div className="text-[10px] text-warm-muted -mt-0.5">Aapni Samaj, Aapnu Network</div>
       </div>
     </Link>

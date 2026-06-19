@@ -1,6 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import {
   ChevronLeft,
@@ -29,7 +30,7 @@ import {
 import { PageTransition, Modal, AvatarCircle } from "@/components/wag/primitives";
 
 export const Route = createFileRoute("/register/community")({
-  head: () => ({ meta: [{ title: "Register your Samaj — We Are Going" }] }),
+  head: () => ({ meta: [{ title: "Register your Samaj — WE ARE UNITED" }] }),
   component: CommReg,
 });
 
@@ -1052,6 +1053,7 @@ function StepHierarchy({ formData, updateField }: { formData: any; updateField: 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [allCommunities, setAllCommunities] = useState<any[]>([]);
+  const [showAdminPass, setShowAdminPass] = useState(false);
 
   useEffect(() => {
     api.getCommunities().then(res => {

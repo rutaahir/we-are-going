@@ -1,4 +1,4 @@
-// Mock data for We Are Going - Cleaned up to delete all dummy data as requested.
+﻿// Mock data for WE ARE UNITED - Cleaned up to delete all dummy data as requested.
 
 export const COMMUNITIES: any[] = [];
 export const MEMBERS: any[] = [];

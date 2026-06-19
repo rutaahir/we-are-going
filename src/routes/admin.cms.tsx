@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { PageWrap } from "@/components/wag/PageWrap";
 import { AnimatedCard, StatusBadge, Modal } from "@/components/wag/primitives";
@@ -7,7 +7,7 @@ import { FileText, Plus, Pencil, Trash2, Mail, HelpCircle, Megaphone, Layout, Ey
 type Tab = "pages" | "banners" | "emails" | "faqs";
 
 const INITIAL_PAGES = [
-  { id: 1, slug: "about", title: "About We Are Going", updated: "2026-05-12", status: "Active" },
+  { id: 1, slug: "about", title: "About WE ARE UNITED", updated: "2026-05-12", status: "Active" },
   { id: 2, slug: "privacy", title: "Privacy Policy", updated: "2026-04-01", status: "Active" },
   { id: 3, slug: "terms", title: "Terms of Service", updated: "2026-04-01", status: "Active" },
   { id: 4, slug: "contact", title: "Contact Us", updated: "2026-05-22", status: "Active" },

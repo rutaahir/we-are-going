@@ -315,6 +315,21 @@ class BusinessSerializer(serializers.ModelSerializer):
         else:
             ret['cover'] = instance.cover_url
             
+        # Gallery serialization
+        gallery = ret.get('gallery') or []
+        if isinstance(gallery, list):
+            serialized_gallery = []
+            for item in gallery:
+                if item and not (item.startswith('http://') or item.startswith('https://') or item.startswith('data:')):
+                    url_path = item if item.startswith('/') else f"/{item}"
+                    if request:
+                        serialized_gallery.append(request.build_absolute_uri(url_path))
+                    else:
+                        serialized_gallery.append(f"http://localhost:8000{url_path}")
+                else:
+                    serialized_gallery.append(item)
+            ret['gallery'] = serialized_gallery
+            
         return ret
 
 class MatrimonyPhotoSerializer(serializers.ModelSerializer):
@@ -880,6 +895,7 @@ class MessageSerializer(serializers.ModelSerializer):
             return {
                 'id': obj.reply_to.id,
                 'content': obj.reply_to.content,
+                'sender': obj.reply_to.sender.id,
                 'sender_name': obj.reply_to.sender.name,
                 'image': image_url
             }
@@ -929,5 +945,126 @@ class ConversationSerializer(serializers.ModelSerializer):
             }
         return None
 
+from .models import (
+    BookingProperty, PropertyResource, ResourcePricing, ResourceLock,
+    VenueBooking, BookingInspection, BookingRefund, BookingWaitingList, ResourceDependency
+)
+
+class BookingPropertySerializer(serializers.ModelSerializer):
+    community_name = serializers.CharField(source='community.name', read_only=True)
+    cover_image = serializers.SerializerMethodField()
+    gallery_images = serializers.SerializerMethodField()
+    starting_price = serializers.SerializerMethodField()
+    available_resources = serializers.SerializerMethodField()
+    availability_status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = BookingProperty
+        fields = '__all__'
+        read_only_fields = ['community']
+
+    def validate(self, attrs):
+        status_value = attrs.get('status', getattr(self.instance, 'status', 'Pending Approval'))
+        reason = attrs.get('rejection_reason', getattr(self.instance, 'rejection_reason', ''))
+        if status_value == 'Rejected' and not str(reason or '').strip():
+            raise serializers.ValidationError({'rejection_reason': 'Rejection reason is required when rejecting a property.'})
+        return attrs
+
+    def get_cover_image(self, obj):
+        return obj.photos[0] if isinstance(obj.photos, list) and obj.photos else None
+
+    def get_gallery_images(self, obj):
+        return obj.photos if isinstance(obj.photos, list) else []
+
+    def get_starting_price(self, obj):
+        rates = []
+        for resource in obj.resources.all():
+            for rate in (resource.hourly_rate, resource.half_day_rate, resource.full_day_rate):
+                try:
+                    value = float(rate or 0)
+                    if value > 0:
+                        rates.append(value)
+                except Exception:
+                    pass
+            for pricing in resource.pricing.all():
+                try:
+                    value = float(pricing.price or 0)
+                    if value > 0:
+                        rates.append(value)
+                except Exception:
+                    pass
+        return min(rates) if rates else float(obj.security_deposit or 0)
+
+    def get_available_resources(self, obj):
+        return obj.resources.filter(status='Active').count()
+
+    def get_availability_status(self, obj):
+        if obj.status != 'Approved':
+            return 'Unavailable'
+        return 'Available' if obj.resources.filter(status='Active').exists() else 'No Active Resources'
+
+class PropertyResourceSerializer(serializers.ModelSerializer):
+    photos = serializers.SerializerMethodField()
+    dependencies = serializers.SerializerMethodField()
+    required_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PropertyResource
+        fields = '__all__'
 
 
+    def validate(self, attrs):
+        min_hours = attrs.get('min_booking_duration_hours', getattr(self.instance, 'min_booking_duration_hours', 1))
+        max_hours = attrs.get('max_booking_duration_hours', getattr(self.instance, 'max_booking_duration_hours', 24))
+        if min_hours and max_hours and int(min_hours) > int(max_hours):
+            raise serializers.ValidationError({'max_booking_duration_hours': 'Maximum booking duration must be greater than or equal to minimum duration.'})
+        return attrs
+
+    def get_photos(self, obj):
+        return obj.media if isinstance(obj.media, list) else []
+
+    def get_dependencies(self, obj):
+        return [dep.requires.id for dep in obj.dependencies.all()]
+
+    def get_required_by(self, obj):
+        return [dep.resource.id for dep in obj.required_by.all()]
+
+class ResourceDependencySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResourceDependency
+        fields = '__all__'
+
+class ResourcePricingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResourcePricing
+        fields = '__all__'
+
+class ResourceLockSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResourceLock
+        fields = '__all__'
+
+class VenueBookingSerializer(serializers.ModelSerializer):
+    property_details = BookingPropertySerializer(source='property', read_only=True)
+    resources_details = PropertyResourceSerializer(source='resources', many=True, read_only=True)
+    member_name = serializers.CharField(source='member.name', read_only=True)
+
+    class Meta:
+        model = VenueBooking
+        fields = '__all__'
+        read_only_fields = ['member', 'booking_number']
+
+class BookingInspectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingInspection
+        fields = '__all__'
+
+class BookingRefundSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingRefund
+        fields = '__all__'
+
+class BookingWaitingListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingWaitingList
+        fields = '__all__'
