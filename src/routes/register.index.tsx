@@ -70,7 +70,8 @@ function Register() {
       photo: "", fullName: "", dob: "", gender: "Male", mobile: "", email: "", password: "",
       country: "India", state: "Gujarat", district: "Amreli", taluka: "Rajula", village: "Rampara", address: "",
       school: "", college: "", degree: "", fieldOfStudy: "", passingYear: "",
-      professionType: "Job", jobTitle: "", company: "", industry: "", salary: "",
+      professionType: "Job", jobTitle: "", jobType: "", jobTypeOther: "", company: "", industry: "", salary: "",
+      jobWorkMode: "On-site", jobCity: "", jobState: "", jobCountry: "India", jobAddress: "",
       businessName: "", businessCategory: "", gstNo: "", businessYears: "",
       businessDesc: "", businessPhone: "", businessWhatsapp: "", businessEmail: "", businessWebsite: "",
       businessAddress: "", businessCity: "", businessState: "", businessPincode: "",
@@ -163,13 +164,13 @@ function Register() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       if (birthDate > today) return toast.error("Birthdate cannot be in the future.");
-      
+
       const calculatedAgeStr = calculateAge(formData.dob);
       const calculatedAge = calculatedAgeStr ? parseInt(calculatedAgeStr, 10) : 0;
       if (calculatedAge < 18) return toast.error("You must be at least 18 years old to register.");
-      
+
       if (!formData.gender) return toast.error("Gender is required.");
-      
+
       if (!formData.mobile.trim()) return toast.error("Mobile number is required.");
       if (!/^\d{10}$/.test(formData.mobile.trim())) {
         return toast.error("Mobile number must be exactly 10 digits.");
@@ -275,9 +276,15 @@ function Register() {
         fd.append("passingYear", formData.passingYear || "");
         fd.append("professionType", formData.professionType);
         fd.append("jobTitle", formData.jobTitle || "");
+        fd.append("jobType", formData.jobType === "Other" ? (formData.jobTypeOther || "") : (formData.jobType || ""));
         fd.append("company", formData.company || "");
         fd.append("industry", formData.industry || "");
         fd.append("salary", formData.salary || "");
+        fd.append("jobWorkMode", formData.jobWorkMode || "");
+        fd.append("jobCity", formData.jobCity || "");
+        fd.append("jobState", formData.jobState || "");
+        fd.append("jobCountry", formData.jobCountry || "");
+        fd.append("jobAddress", formData.jobAddress || "");
         fd.append("businessName", formData.businessName || "");
         fd.append("businessCategory", formData.businessCategory || "");
         fd.append("gstNo", formData.gstNo || "");
@@ -1224,11 +1231,10 @@ function Profession({
         <div className="flex items-center w-full p-1 bg-white border border-[#E6D9C8] rounded-full shadow-sm">
           {(["Job", "Business"] as const).map(x => (
             <button key={x} type="button" onClick={() => onChange("professionType", x)}
-              className={`flex-1 py-2 rounded-full text-xs font-bold transition-all duration-300 ${
-                data.professionType === x
+              className={`flex-1 py-2 rounded-full text-xs font-bold transition-all duration-300 ${data.professionType === x
                   ? "bg-gradient-to-r from-[#F25C05] to-[#FFA74D] text-white shadow-sm"
                   : "text-[#7A6455] hover:bg-orange-50 hover:text-orange-900"
-              }`}>
+                }`}>
               {x}
             </button>
           ))}
@@ -1238,10 +1244,73 @@ function Profession({
       <AnimatePresence mode="wait">
         {data.professionType === "Job" ? (
           <motion.div key="job" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid sm:grid-cols-2 gap-x-6 gap-y-5">
+
+            {/* Row 1: Job Title + Job Type */}
             <BlobInput label="Job Title" value={data.jobTitle} onChange={(e: any) => onChange("jobTitle", e.target.value)} placeholder="" />
+            <div className="flex flex-col gap-2">
+              <BlobSelect
+                label="Job Type / Profession"
+                options={[
+                  "IT & Software", "Engineering", "Healthcare & Medical", "Education & Teaching",
+                  "Finance & Accounting", "Sales & Marketing", "Government & Defence", "Legal",
+                  "Agriculture & Farming", "Construction & Real Estate", "Retail & Commerce",
+                  "Media & Entertainment", "Hospitality & Tourism", "Transport & Logistics",
+                  "Manufacturing", "Research & Science", "Arts & Design", "Other"
+                ]}
+                value={data.jobType || ""}
+                onChange={(val: string) => { onChange("jobType", val); if (val !== "Other") onChange("jobTypeOther", ""); }}
+              />
+              {data.jobType === "Other" && (
+                <BlobInput
+                  label="Specify Job Type"
+                  value={data.jobTypeOther || ""}
+                  onChange={(e: any) => onChange("jobTypeOther", e.target.value)}
+                  placeholder="e.g. Event Planner, Astrologer..."
+                />
+              )}
+            </div>
+
+            {/* Row 2: Company + Industry */}
             <BlobInput label="Company" value={data.company} onChange={(e: any) => onChange("company", e.target.value)} placeholder="" />
             <BlobInput label="Industry" value={data.industry} onChange={(e: any) => onChange("industry", e.target.value)} placeholder="" />
+
+            {/* Row 3: Annual Salary + Work Mode */}
             <BlobInput label="Annual Salary (LPA)" type="number" value={data.salary} onChange={(e: any) => onChange("salary", e.target.value)} placeholder="" />
+            <BlobSelect
+              label="Work Mode"
+              options={["On-site", "Remote", "Hybrid"]}
+              value={data.jobWorkMode || "On-site"}
+              onChange={(val: string) => onChange("jobWorkMode", val)}
+            />
+
+            {/* Job Location Section Header */}
+            <div className="sm:col-span-2">
+              <span className="text-[11px] font-bold text-[#EA580C] uppercase tracking-wider block mb-0">Job Location</span>
+              <div className="h-px bg-orange-100 mt-1" />
+            </div>
+
+            {/* Row 4: Job City + Job State */}
+            <BlobInput label="Job City" value={data.jobCity || ""} onChange={(e: any) => onChange("jobCity", e.target.value)} placeholder="e.g. Ahmedabad" />
+            <BlobInput label="Job State" value={data.jobState || ""} onChange={(e: any) => onChange("jobState", e.target.value)} placeholder="e.g. Gujarat" />
+
+            {/* Row 5: Job Country + Job Full Address */}
+            <BlobSelect
+              label="Job Country"
+              options={["India", "United States", "United Kingdom", "Canada", "Australia", "United Arab Emirates", "Other"]}
+              value={data.jobCountry || "India"}
+              onChange={(val: string) => onChange("jobCountry", val)}
+            />
+            <div className="bg-white/60 hover:bg-white/80 border border-[#E6D9C8] rounded-2xl p-3 px-4 transition-all focus-within:ring-2 focus-within:ring-orange-500/10 focus-within:border-[#EA580C] focus-within:bg-white w-full">
+              <span className="text-[10px] font-bold text-[#EA580C] uppercase tracking-wider block leading-tight">Job Address</span>
+              <textarea
+                rows={2}
+                className="w-full bg-transparent border-none outline-none text-sm text-[#2C1D12] font-bold p-0 focus:ring-0 mt-1 resize-none"
+                placeholder="Office / workplace full address"
+                value={data.jobAddress || ""}
+                onChange={(e: any) => onChange("jobAddress", e.target.value)}
+              />
+            </div>
+
           </motion.div>
         ) : (
           <motion.div key="business" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
@@ -1249,11 +1318,10 @@ function Profession({
             <div className="flex gap-1 bg-orange-50/60 border border-[#E6D9C8] rounded-2xl p-1">
               {(["basic", "contact", "hours"] as const).map(tab => (
                 <button key={tab} type="button" onClick={() => setBizTab(tab)}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all ${
-                    bizTab === tab
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all ${bizTab === tab
                       ? "bg-gradient-to-r from-[#F25C05] to-[#FFA74D] text-white shadow-sm"
                       : "text-[#7A6455] hover:text-[#EA580C]"
-                  }`}>
+                    }`}>
                   {tab === "basic" ? "Basic Info" : tab === "contact" ? "Contact & Location" : "Hours & Socials"}
                 </button>
               ))}
@@ -1299,7 +1367,7 @@ function Profession({
                     <div className="text-[11px] text-[#7A6455] font-semibold mt-0.5">PNG, JPG (up to 10 photos, max 2MB each)</div>
                     <input type="file" multiple accept="image/*" className="hidden" onChange={handleGalleryChange} />
                   </label>
-                  
+
                   {/* Selected Gallery Previews */}
                   {galleryPreviews.length > 0 && (
                     <div className="grid grid-cols-5 gap-2 mt-3">
@@ -1437,7 +1505,7 @@ function Community({ data, onChange, communities }: { data: any; onChange: (key:
 
       {/* Warning banner to guide community selection */}
       <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl flex items-start gap-3 text-xs text-amber-800">
-        <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
         <span><strong>Important:</strong> Make sure you select the <strong>exact community</strong> you belong to. Selecting the wrong community will delay your approval.</span>
       </div>
 

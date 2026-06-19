@@ -4998,7 +4998,7 @@ class BookingPropertyViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         member = self._member()
-        status = 'Approved' if (self._is_super_admin(member) or (member and member.role == 'community_admin')) else 'Pending Approval'
+        status = 'Approved' if self._is_super_admin(member) else 'Pending Approval'
         is_approved = status == 'Approved'
         
         photos_data = self.request.data.get('photos')
@@ -5058,13 +5058,14 @@ class BookingPropertyViewSet(viewsets.ModelViewSet):
                 path = default_storage.save(f'property_photos/{f.name}', f)
                 photos.append(default_storage.url(path))
 
-        if not (self._is_super_admin(member) or (member and member.role == 'community_admin' and instance.community_id == member.community_id)):
-            serializer.save(community=instance.community, status='Pending Approval', rejection_reason='', photos=photos, notified=False)
-        else:
+        if self._is_super_admin(member):
             new_status = instance.status
-            if member and member.role == 'community_admin':
-                new_status = 'Approved'
             serializer.save(status=new_status, photos=photos, notified=(new_status == 'Approved'))
+        elif member and member.role == 'community_admin' and instance.community_id == member.community_id:
+            # Updating a property by community admin resets its status to Pending Approval for Super Admin review
+            serializer.save(status='Pending Approval', rejection_reason='', photos=photos, notified=False)
+        else:
+            serializer.save(community=instance.community, status='Pending Approval', rejection_reason='', photos=photos, notified=False)
 
     def destroy(self, request, *args, **kwargs):
         member = self._member()
@@ -5077,8 +5078,8 @@ class BookingPropertyViewSet(viewsets.ModelViewSet):
     def approve(self, request, pk=None):
         member = self._member()
         prop = self.get_object()
-        if not (self._is_super_admin(member) or (member and member.role == 'community_admin' and prop.community_id == member.community_id)):
-            return Response({'error': 'Only Super Admins or Community Admins of this property can approve properties.'}, status=403)
+        if not self._is_super_admin(member):
+            return Response({'error': 'Only Super Admins can approve properties.'}, status=403)
         prop.status = 'Approved'
         prop.rejection_reason = ''
         prop.notified = True
@@ -5089,8 +5090,8 @@ class BookingPropertyViewSet(viewsets.ModelViewSet):
     def reject(self, request, pk=None):
         member = self._member()
         prop = self.get_object()
-        if not (self._is_super_admin(member) or (member and member.role == 'community_admin' and prop.community_id == member.community_id)):
-            return Response({'error': 'Only Super Admins or Community Admins of this property can reject properties.'}, status=403)
+        if not self._is_super_admin(member):
+            return Response({'error': 'Only Super Admins can reject properties.'}, status=403)
         reason = str(request.data.get('rejection_reason', '')).strip()
         if not reason:
             return Response({'rejection_reason': 'Rejection reason is required.'}, status=400)

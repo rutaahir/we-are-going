@@ -35,6 +35,7 @@ function MemberJobsPage() {
   const [appStatuses, setAppStatuses] = useState<Record<number, string>>({});
   const [savedJobIds, setSavedJobIds] = useState<number[]>([]);
   const [tab, setTab] = useState<"All" | "Applied" | "Saved">("All");
+  const [selectedCategory, setSelectedCategory] = useState("All");
 
   // Application Modal state
   const [applyingJob, setApplyingJob] = useState<Job | null>(null);
@@ -49,7 +50,7 @@ function MemberJobsPage() {
     city: "",
     state: "",
     country: "India",
-    
+
     occupation: "",
     company: "",
     experience: "",
@@ -59,12 +60,12 @@ function MemberJobsPage() {
     noticePeriod: "",
     qualification: "",
     skills: "",
-    
+
     coverLetter: "",
     portfolio: "",
     linkedin: "",
     github: "",
-    
+
     whyInterested: "",
     willingToRelocate: false,
     joiningDate: "",
@@ -79,10 +80,10 @@ function MemberJobsPage() {
       const commId = user?.communityId;
       const ancestors = commId ? await api.getAncestorCommunityIds(commId) : [];
       const filterQuery = ancestors.join(",");
-      
+
       const jobsData = await api.getJobs({ community_id: filterQuery });
       setJobs(jobsData || []);
-      
+
       const apps = await api.getJobApplications();
       const ids = (apps || []).map((app: any) => Number(app.job));
       setAppliedJobIds(ids);
@@ -116,7 +117,7 @@ function MemberJobsPage() {
           const freshUser = await api.getCurrentUser();
           if (freshUser && freshUser.member) {
             const m = freshUser.member;
-            
+
             // Address fallback helper
             const addressParts = [m.village, m.taluka, m.district].filter(Boolean);
             const addressVal = addressParts.length > 0 ? addressParts.join(", ") : (m.address || "");
@@ -175,12 +176,12 @@ function MemberJobsPage() {
     if (!formData.city.trim()) return "City is required.";
     if (!formData.state.trim()) return "State is required.";
     if (!formData.country.trim()) return "Country is required.";
-    
+
     if (!formData.occupation.trim()) return "Current Occupation is required.";
     if (!formData.experience.trim()) return "Total Experience is required.";
     if (!formData.qualification.trim()) return "Highest Qualification is required.";
     if (!formData.skills.trim()) return "Skills field is required.";
-    
+
     if (!resumeFile) return "Resume / CV upload is required.";
     const allowedExtensions = ["pdf", "doc", "docx"];
     const ext = resumeFile.name.split(".").pop()?.toLowerCase();
@@ -190,7 +191,7 @@ function MemberJobsPage() {
     if (resumeFile.size > 10 * 1024 * 1024) {
       return "Resume file size exceeds the 10MB limit.";
     }
-    
+
     return "";
   };
 
@@ -203,7 +204,7 @@ function MemberJobsPage() {
     }
     setValidationError("");
     setSubmitting(true);
-    
+
     try {
       if (!applyingJob) return;
       const data = new FormData();
@@ -237,18 +238,18 @@ function MemberJobsPage() {
       data.append("why_interested", formData.whyInterested);
       data.append("willing_to_relocate", String(formData.willingToRelocate));
       data.append("available_joining_date", formData.joiningDate);
-      
+
       await api.createJobApplication(data);
-      
+
       // Update local state instantly
       const updatedApplied = [...appliedJobIds, applyingJob.id];
       setAppliedJobIds(updatedApplied);
       setAppStatuses(prev => ({ ...prev, [applyingJob!.id]: "Applied" }));
-      
-      setJobs(prevJobs => 
+
+      setJobs(prevJobs =>
         prevJobs.map(j => j.id === applyingJob.id ? { ...j, applicants: j.applicants + 1 } : j)
       );
-      
+
       // Close Modal & Show Success
       setApplyingJob(null);
       setResumeFile(null);
@@ -274,34 +275,34 @@ function MemberJobsPage() {
 
   // Filtering logic
   const filteredJobs = jobs.filter(j => {
-    const matchesSearch = (j.role || "").toLowerCase().includes(search.toLowerCase()) || 
-                          (j.company || "").toLowerCase().includes(search.toLowerCase()) ||
-                          (j.desc || "").toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (j.role || "").toLowerCase().includes(search.toLowerCase()) ||
+      (j.company || "").toLowerCase().includes(search.toLowerCase()) ||
+      (j.desc || "").toLowerCase().includes(search.toLowerCase());
     const matchesLocation = selectedLocation === "All" || j.location === selectedLocation;
     const matchesType = selectedType === "All" || j.type === selectedType;
-    
+    const matchesCategory = selectedCategory === "All" || j.category === selectedCategory;
+
     if (tab === "Applied") {
-      return matchesSearch && matchesLocation && matchesType && appliedJobIds.includes(j.id);
+      return matchesSearch && matchesLocation && matchesType && matchesCategory && appliedJobIds.includes(j.id);
     }
     if (tab === "Saved") {
-      return matchesSearch && matchesLocation && matchesType && savedJobIds.includes(j.id);
+      return matchesSearch && matchesLocation && matchesType && matchesCategory && savedJobIds.includes(j.id);
     }
-    return matchesSearch && matchesLocation && matchesType;
+    return matchesSearch && matchesLocation && matchesType && matchesCategory;
   });
 
   return (
     <PageWrap title="Job Portal" desc="Explore premium career opportunities in our community">
       <div className="flex gap-2 border-b border-warm mb-6">
         {(["All", "Applied", "Saved"] as const).map(t => (
-          <button 
-            key={t} 
-            onClick={() => setTab(t)} 
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-all ${
-              tab === t ? "border-primary text-primary font-semibold" : "border-transparent text-warm-muted"
-            }`}
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-all ${tab === t ? "border-primary text-primary font-semibold" : "border-transparent text-warm-muted"
+              }`}
           >
             {t === "Applied" ? "Applied Jobs" : t === "Saved" ? "Saved Jobs" : "All Jobs"}
-            {t === "Applied" && ` (${appliedJobIds.length})`} 
+            {t === "Applied" && ` (${appliedJobIds.length})`}
             {t === "Saved" && ` (${savedJobIds.length})`}
           </button>
         ))}
@@ -310,14 +311,14 @@ function MemberJobsPage() {
       <div className="grid sm:grid-cols-4 gap-3 mb-6">
         <div className="relative col-span-2">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-warm-muted" />
-          <input 
+          <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by role, company, or description..." 
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-warm bg-surface text-sm focus:outline-none focus:ring-1 focus:ring-primary" 
+            placeholder="Search by role, company, or description..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-warm bg-surface text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
-        <select 
+        <select
           value={selectedLocation}
           onChange={(e) => setSelectedLocation(e.target.value)}
           className="px-3 py-2 rounded-lg border border-warm bg-surface text-sm focus:outline-none focus:ring-1 focus:ring-primary"
@@ -327,7 +328,7 @@ function MemberJobsPage() {
             <option key={l} value={l}>{l}</option>
           ))}
         </select>
-        <select 
+        <select
           value={selectedType}
           onChange={(e) => setSelectedType(e.target.value)}
           className="px-3 py-2 rounded-lg border border-warm bg-surface text-sm focus:outline-none focus:ring-1 focus:ring-primary"
@@ -335,6 +336,22 @@ function MemberJobsPage() {
           <option value="All">All Job Types</option>
           {types.filter(t => t !== "All").map(t => (
             <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-3 py-2 rounded-lg border border-warm bg-surface text-sm focus:outline-none focus:ring-1 focus:ring-primary col-span-2 sm:col-span-1"
+        >
+          <option value="All">All Categories</option>
+          {[
+            "IT & Software", "Engineering", "Healthcare & Medical", "Education & Teaching",
+            "Finance & Accounting", "Sales & Marketing", "Government & Defence", "Legal",
+            "Agriculture & Farming", "Construction & Real Estate", "Retail & Commerce",
+            "Media & Entertainment", "Hospitality & Tourism", "Transport & Logistics",
+            "Manufacturing", "Research & Science", "Arts & Design", "Other"
+          ].map(c => (
+            <option key={c} value={c}>{c}</option>
           ))}
         </select>
       </div>
@@ -363,33 +380,31 @@ function MemberJobsPage() {
                     <StatusBadge status="Open" />
                   </div>
                   <p className="text-xs text-warm-muted mt-3 line-clamp-3 leading-relaxed">{j.desc}</p>
-                  
+
                   <div className="flex items-center justify-between mt-4 pt-3 border-t border-warm/40">
                     <span className="text-xs text-warm-muted font-medium">
                       {j.applicants} applicant{j.applicants !== 1 ? "s" : ""}
                     </span>
                     <div className="flex gap-2">
-                      <button 
+                      <button
                         onClick={() => toggleSave(j.id)}
-                        className={`p-2 rounded-lg border transition-all ${
-                          savedJobIds.includes(j.id) 
-                            ? "border-accent bg-accent/10 text-accent" 
-                            : "border-warm hover:bg-surface-hover text-warm-muted"
-                        }`}
+                        className={`p-2 rounded-lg border transition-all ${savedJobIds.includes(j.id)
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border-warm hover:bg-surface-hover text-warm-muted"
+                          }`}
                         title={savedJobIds.includes(j.id) ? "Remove Bookmark" : "Bookmark Job"}
                       >
                         <Bookmark className="w-4 h-4 fill-current" />
                       </button>
                       {appliedJobIds.includes(j.id) ? (
                         <div className="flex flex-col items-end gap-1">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                            appStatuses[j.id] === "Selected" ? "bg-green-50 text-green-600 border-green-200" :
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${appStatuses[j.id] === "Selected" ? "bg-green-50 text-green-600 border-green-200" :
                             appStatuses[j.id] === "Rejected" ? "bg-red-50 text-red-600 border-red-200" :
-                            appStatuses[j.id] === "Shortlisted" ? "bg-purple-50 text-purple-600 border-purple-200" :
-                            appStatuses[j.id] === "Interview Scheduled" ? "bg-orange-50 text-orange-600 border-orange-200" :
-                            appStatuses[j.id] === "Under Review" ? "bg-yellow-50 text-yellow-600 border-yellow-200" :
-                            "bg-blue-50 text-blue-600 border-blue-200"
-                          }`}>
+                              appStatuses[j.id] === "Shortlisted" ? "bg-purple-50 text-purple-600 border-purple-200" :
+                                appStatuses[j.id] === "Interview Scheduled" ? "bg-orange-50 text-orange-600 border-orange-200" :
+                                  appStatuses[j.id] === "Under Review" ? "bg-yellow-50 text-yellow-600 border-yellow-200" :
+                                    "bg-blue-50 text-blue-600 border-blue-200"
+                            }`}>
                             {appStatuses[j.id] || "Applied"}
                           </span>
                           <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
@@ -397,7 +412,7 @@ function MemberJobsPage() {
                           </span>
                         </div>
                       ) : (
-                        <button 
+                        <button
                           onClick={() => handleApplyClick(j)}
                           className="px-4 py-2 rounded-lg font-semibold text-xs flex items-center gap-1 transition-all bg-primary hover:bg-primary-hover text-white hover:shadow-sm"
                         >
@@ -424,7 +439,7 @@ function MemberJobsPage() {
                   Job Application
                 </span>
                 <h2 className="text-xl font-bold text-slate-800 mt-2">Apply for Job</h2>
-                
+
                 {/* Short Job Info summary card inside header */}
                 <div className="mt-3 p-3 bg-white rounded-xl border border-warm flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600">
                   <span className="font-bold text-slate-800 text-sm block w-full">{applyingJob.role} at {applyingJob.company}</span>
@@ -433,7 +448,7 @@ function MemberJobsPage() {
                   <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5 text-warm-muted" /> {applyingJob.type}</span>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setApplyingJob(null)}
                 className="p-1.5 rounded-lg hover:bg-warm/50 text-slate-500 hover:text-slate-700 transition"
               >
@@ -461,7 +476,7 @@ function MemberJobsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.fullName}
@@ -471,7 +486,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address *</label>
-                    <input 
+                    <input
                       type="email"
                       required
                       value={formData.email}
@@ -481,7 +496,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Mobile Number *</label>
-                    <input 
+                    <input
                       type="tel"
                       required
                       value={formData.mobile}
@@ -491,7 +506,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Alternate Mobile Number</label>
-                    <input 
+                    <input
                       type="tel"
                       value={formData.altMobile}
                       onChange={(e) => setFormData(prev => ({ ...prev, altMobile: e.target.value }))}
@@ -500,7 +515,7 @@ function MemberJobsPage() {
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Current Address *</label>
-                    <textarea 
+                    <textarea
                       required
                       rows={2}
                       value={formData.address}
@@ -510,7 +525,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">City *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.city}
@@ -520,7 +535,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">State *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.state}
@@ -530,7 +545,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Country *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.country}
@@ -549,7 +564,7 @@ function MemberJobsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Current Occupation *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.occupation}
@@ -560,7 +575,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Current Company</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.company}
                       onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
@@ -570,7 +585,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Total Experience *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.experience}
@@ -581,7 +596,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Relevant Experience</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.relevantExperience}
                       onChange={(e) => setFormData(prev => ({ ...prev, relevantExperience: e.target.value }))}
@@ -591,7 +606,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Current Salary</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.currentSalary}
                       onChange={(e) => setFormData(prev => ({ ...prev, currentSalary: e.target.value }))}
@@ -601,7 +616,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Salary</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.expectedSalary}
                       onChange={(e) => setFormData(prev => ({ ...prev, expectedSalary: e.target.value }))}
@@ -611,7 +626,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Notice Period</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.noticePeriod}
                       onChange={(e) => setFormData(prev => ({ ...prev, noticePeriod: e.target.value }))}
@@ -621,7 +636,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Highest Qualification *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.qualification}
@@ -632,7 +647,7 @@ function MemberJobsPage() {
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Skills (Comma separated) *</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       value={formData.skills}
@@ -653,7 +668,7 @@ function MemberJobsPage() {
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Resume / CV Upload * (PDF, DOC, DOCX - Max 10MB)</label>
                     <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-warm rounded-xl bg-sand/20 hover:bg-sand/35 transition cursor-pointer relative">
-                      <input 
+                      <input
                         type="file"
                         required
                         accept=".pdf,.doc,.docx"
@@ -681,7 +696,7 @@ function MemberJobsPage() {
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Cover Letter (Optional)</label>
-                    <textarea 
+                    <textarea
                       rows={3}
                       value={formData.coverLetter}
                       onChange={(e) => setFormData(prev => ({ ...prev, coverLetter: e.target.value }))}
@@ -691,7 +706,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Portfolio URL</label>
-                    <input 
+                    <input
                       type="url"
                       value={formData.portfolio}
                       onChange={(e) => setFormData(prev => ({ ...prev, portfolio: e.target.value }))}
@@ -701,7 +716,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">LinkedIn Profile URL</label>
-                    <input 
+                    <input
                       type="url"
                       value={formData.linkedin}
                       onChange={(e) => setFormData(prev => ({ ...prev, linkedin: e.target.value }))}
@@ -711,7 +726,7 @@ function MemberJobsPage() {
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Github URL (Optional)</label>
-                    <input 
+                    <input
                       type="url"
                       value={formData.github}
                       onChange={(e) => setFormData(prev => ({ ...prev, github: e.target.value }))}
@@ -730,7 +745,7 @@ function MemberJobsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Why are you interested in this position?</label>
-                    <textarea 
+                    <textarea
                       rows={2}
                       value={formData.whyInterested}
                       onChange={(e) => setFormData(prev => ({ ...prev, whyInterested: e.target.value }))}
@@ -738,7 +753,7 @@ function MemberJobsPage() {
                     />
                   </div>
                   <div className="flex items-center gap-2 pt-2 sm:col-span-1">
-                    <input 
+                    <input
                       type="checkbox"
                       id="willingToRelocate"
                       checked={formData.willingToRelocate}
@@ -749,7 +764,7 @@ function MemberJobsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Available Joining Date</label>
-                    <input 
+                    <input
                       type="text"
                       value={formData.joiningDate}
                       onChange={(e) => setFormData(prev => ({ ...prev, joiningDate: e.target.value }))}
@@ -763,14 +778,14 @@ function MemberJobsPage() {
 
             {/* Modal Footer */}
             <div className="p-4 bg-sand border-t border-warm flex gap-2 justify-end">
-              <button 
+              <button
                 type="button"
                 onClick={() => setApplyingJob(null)}
                 className="px-4 py-2 rounded-xl border border-warm hover:bg-warm/30 text-xs font-bold transition text-slate-600"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 type="submit"
                 disabled={submitting}
                 onClick={handleSubmit}

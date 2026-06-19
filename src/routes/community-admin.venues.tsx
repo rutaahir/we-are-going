@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
+import React, { useState, useEffect, useRef } from "react";
 import { api, getImageUrl } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ type LocalTab = 'overview' | 'add-property' | 'bookings' | 'ledger' | 'payments'
 
 export function AdminVenues() {
   const { user } = useAuth();
-  const search = Route.useSearch() as any;
+  const search = useSearch({ strict: false }) as any;
   const tabFromSearch = search?.tab as LocalTab;
   const isSuperAdmin = user?.role === "super_admin";
 
