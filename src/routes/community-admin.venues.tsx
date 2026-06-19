@@ -104,6 +104,14 @@ export function AdminVenues() {
   const [members, setMembers] = useState<any[]>([]);
   const [dependenciesList, setDependenciesList] = useState<any[]>([]);
 
+  // Step 3 Page State
+  const [step3Page, setStep3Page] = useState(1);
+
+  // Step 5 Add-ons States
+  const [addonForm, setAddonForm] = useState({ name: '', price: '', hourly_rate: '', daily_rate: '' });
+  const [addonsList, setAddonsList] = useState<any[]>([]);
+  const [savingAddon, setSavingAddon] = useState(false);
+
   // Wizard Flow States (Step 1 to 12)
   const [selectedPropertyForWizard, setSelectedPropertyForWizardState] = useState<any>(() => {
     if (typeof window !== 'undefined') {
@@ -1595,8 +1603,7 @@ export function AdminVenues() {
       .filter((r:any) => r.name.toLowerCase().includes(resourceSearch.toLowerCase()))
       .filter((r:any) => resourceTypeFilter === "All" || r.resource_type.includes(resourceTypeFilter));
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    const [page, setPage] = React.useState(1);
-    const safePage = Math.min(page, totalPages);
+    const safePage = Math.min(step3Page, totalPages);
     const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
     return (
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="w-full space-y-6">
@@ -1690,10 +1697,10 @@ export function AdminVenues() {
               <div className="flex items-center justify-between pt-1">
                 <span className="text-xs text-warm-muted font-medium">Page {safePage} of {totalPages} &bull; {filtered.length} total</span>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-xs font-bold" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p-1))}>
+                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-xs font-bold" disabled={safePage <= 1} onClick={() => setStep3Page(p => Math.max(1, p-1))}>
                     <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Prev
                   </Button>
-                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-xs font-bold" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p+1))}>
+                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-xs font-bold" disabled={safePage >= totalPages} onClick={() => setStep3Page(p => Math.min(totalPages, p+1))}>
                     Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
                   </Button>
                 </div>
@@ -1832,11 +1839,7 @@ export function AdminVenues() {
     );
   };
 
-  // Step 5: Add-ons Manager — fully dynamic
   const renderStep5 = () => {
-    const [addonForm, setAddonForm] = React.useState({ name: '', price: '', hourly_rate: '', daily_rate: '' });
-    const [addonsList, setAddonsList] = React.useState<any[]>([]);
-    const [savingAddon, setSavingAddon] = React.useState(false);
 
     const handleAddAddon = async () => {
       if (!addonForm.name.trim()) { toast.error('Add-on name is required'); return; }
